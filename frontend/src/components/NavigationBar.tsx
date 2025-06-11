@@ -17,7 +17,7 @@ import React from 'react';
 import styled from 'styled-components';
 import clsx from 'clsx';
 
-import { ReactComponent as MenuIcon } from '../assets/menu.svg'; // vector icon (to be added)
+import menuIconUrl from '../assets/menu.svg';
 
 /* -------------------------------------------------------------------------- */
 /* Types & Props                                                              */
@@ -130,7 +130,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
       </Filters>
 
       <MenuButton aria-label="Open Menu" onClick={onMenu}>
-        <MenuIcon />
+        <img src={menuIconUrl} alt="Menu" />
       </MenuButton>
     </Bar>
   );

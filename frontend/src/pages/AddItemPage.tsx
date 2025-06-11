@@ -19,7 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { PaymentItemForm } from '../components/PaymentItemForm';
 import { useCreatePaymentItem } from '../api/hooks';
-import { PaymentItem } from '../types';
+import { PaymentItemFormData } from '../types';
 
 const PageWrapper = styled.div`
   padding: 1rem;
@@ -33,11 +33,11 @@ const AddItemPage: React.FC = () => {
   /**
    * Handles the submission of the payment item form.
    * Calls the createPaymentItem mutation and navigates on success.
-   * @param data - The payment item data from the form, excluding 'id', 'recipient' object, and full 'categories' objects (expects category IDs).
+   * @param data - The form data, conforming to the PaymentItemFormData type.
    */
-  const handleSubmit = async (data: Omit<PaymentItem, 'id' | 'recipient' | 'categories'>) => {
+  const handleSubmit = async (data: PaymentItemFormData) => {
     try {
-      await createPaymentItemMutation.mutateAsync(data as Omit<PaymentItem, 'id' | 'recipient'>); // Ensure type alignment with hook
+      await createPaymentItemMutation.mutateAsync(data);
       navigate('/'); // Navigate to summary page on success
     } catch (error) {
       // Error logging is useful for development.

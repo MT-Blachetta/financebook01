@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, SQLModel
 
 ###############################################################################
 # Association table (many-to-many) between PaymentItem and Category
@@ -59,9 +59,6 @@ class CategoryType(SQLModel, table=True):
     name: str
     description: Optional[str] = None
 
-    # Reverse relationship: CategoryType → Categories
-    categories: List["Category"] = Relationship(back_populates="type")
-
 
 class Category(SQLModel, table=True):
     """
@@ -80,21 +77,6 @@ class Category(SQLModel, table=True):
     # Recursive parent pointer (nullable for root nodes)
     parent_id: Optional[int] = Field(default=None, foreign_key="category.id")
 
-    # Relationships ----------------------------------------------------------
-    type: CategoryType = Relationship(back_populates="categories")
-
-    parent: Optional["Category"] = Relationship(
-        back_populates="children",
-        sa_relationship_kwargs={"remote_side": "Category.id"},
-    )
-    children: List["Category"] = Relationship(back_populates="parent")
-
-    # Many-to-many link to PaymentItem
-    payment_items: List["PaymentItem"] = Relationship(
-        back_populates="categories",
-        link_model=PaymentItemCategoryLink,
-    )
-
 
 ###############################################################################
 # Core business entities
@@ -112,13 +94,10 @@ class Recipient(SQLModel, table=True):
     description: Optional[str] = None
     address: Optional[str] = None
 
-    # One-to-many: Recipient → PaymentItems
-    payment_items: List["PaymentItem"] = Relationship(back_populates="recipient")
 
-
-class PaymentItem(SQLModel, table=True):
+class PaymentItemBase(SQLModel):
     """
-    Atomic record of money entering or leaving the wallet.
+    Base model for a payment item, containing all common fields.
 
     Conventions
     -----------
@@ -128,7 +107,6 @@ class PaymentItem(SQLModel, table=True):
     • `periodic=True` marks template items that spawn future instances via
       scheduled jobs (not yet implemented).
     """
-    id: Optional[int] = Field(default=None, primary_key=True)
     amount: float  # Use DECIMAL in production to avoid rounding errors
     timestamp: datetime
     periodic: bool = False
@@ -136,12 +114,44 @@ class PaymentItem(SQLModel, table=True):
     # Optional attachments (local path or S3 URL – persisted by upload endpoints)
     invoice_path: Optional[str] = None
     product_image_path: Optional[str] = None
-
-    # Relationships ----------------------------------------------------------
     recipient_id: Optional[int] = Field(default=None, foreign_key="recipient.id")
-    recipient: Optional[Recipient] = Relationship(back_populates="payment_items")
 
-    categories: List[Category] = Relationship(
-        back_populates="payment_items",
-        link_model=PaymentItemCategoryLink,
-    )
+class PaymentItem(PaymentItemBase, table=True):
+    """
+    Database model for a payment item. Inherits from Base and adds DB-specific fields.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+# ==============================================================================
+# API Models (Pydantic Schemas) for PaymentItem
+# ==============================================================================
+
+class PaymentItemCreate(PaymentItemBase):
+    """
+    Schema for creating a new payment item via the API.
+    Accepts a list of category IDs instead of full Category objects.
+    """
+    category_ids: Optional[List[int]] = []
+
+class PaymentItemUpdate(PaymentItemBase):
+    """
+    Schema for updating an existing payment item via the API.
+    All fields are optional for partial updates.
+    """
+    amount: Optional[float] = None
+    timestamp: Optional[datetime] = None
+    periodic: Optional[bool] = None
+    invoice_path: Optional[str] = None
+    product_image_path: Optional[str] = None
+    recipient_id: Optional[int] = None
+    category_ids: Optional[List[int]] = None
+
+class PaymentItemRead(PaymentItemBase):
+    """
+
+    Schema for reading/returning a payment item from the API.
+    Includes the full Recipient and Category objects for detailed views.
+    """
+    id: int
+    recipient: Optional[Recipient] = None
+    categories: List[Category] = []

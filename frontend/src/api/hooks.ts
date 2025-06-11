@@ -109,8 +109,10 @@ export function usePaymentItem(itemId: number | undefined) {
  */
 export function useCreatePaymentItem() {
   const queryClient = useQueryClient();
-  return useMutation<PaymentItem, Error, Omit<PaymentItem, 'id' | 'recipient'>>({
-    mutationFn: async (newItem: Omit<PaymentItem, 'id' | 'recipient'>) => {
+  // The API now expects a `PaymentItemCreate` schema, which includes `category_ids`.
+  // The mutation variable type is generic to accept the form data.
+  return useMutation<PaymentItem, Error, { [key: string]: any; category_ids?: number[] }>({
+    mutationFn: async (newItem) => {
       const res = await api.post<PaymentItem>('/payment-items', newItem);
       return res.data;
     },
@@ -127,11 +129,14 @@ export function useCreatePaymentItem() {
  */
 export function useUpdatePaymentItem() {
   const queryClient = useQueryClient();
-  return useMutation<PaymentItem, Error, PaymentItem>({
-    mutationFn: async (itemToUpdate: PaymentItem) => {
+  // The API now expects a `PaymentItemUpdate` schema.
+  // The mutation variable type is generic to accept the form data.
+  return useMutation<PaymentItem, Error, { id: number; [key: string]: any; category_ids?: number[] }>({
+    mutationFn: async (itemToUpdate) => {
+      const { id, ...updateData } = itemToUpdate;
       const res = await api.put<PaymentItem>(
-        `/payment-items/${itemToUpdate.id}`,
-        itemToUpdate
+        `/payment-items/${id}`,
+        updateData
       );
       return res.data;
     },

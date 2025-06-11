@@ -19,7 +19,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { PaymentItemForm } from '../components/PaymentItemForm';
 import { usePaymentItem, useUpdatePaymentItem } from '../api/hooks';
-import { PaymentItem } from '../types';
+import { PaymentItem, PaymentItemFormData } from '../types';
 
 const PageWrapper = styled.div`
   padding: 1rem;
@@ -50,29 +50,20 @@ const EditItemPage: React.FC = () => {
   /**
    * Handles the submission of the updated payment item form.
    * Calls the updatePaymentItem mutation and navigates on success.
-   * @param data - The payment item data from the form. In the context of EditItemPage, this will include an 'id'.
+   * @param data - The form data, conforming to the PaymentItemFormData type.
    */
-  const handleSubmit = async (data: PaymentItem | Omit<PaymentItem, 'id' | 'recipient'>) => {
-    // Type guard to ensure 'data' is a full PaymentItem for the update operation.
-    // This is expected in EditItemPage as we are editing an existing item.
-    if ('id' in data && typeof data.id === 'number') {
-      // At this point, TypeScript knows data has an 'id' property of type number.
-      // We can now safely treat 'data' as a full PaymentItem for the mutation.
-      // The other properties are expected to be present as per the form's structure.
-      const paymentItemForUpdate: PaymentItem = data as PaymentItem;
-      try {
-        await updatePaymentItemMutation.mutateAsync(paymentItemForUpdate);
-        navigate('/'); // Navigate to summary page on success
-      } catch (error) {
-        // Error logging is useful for development.
-        // The `isError` and `error` properties of the mutation are used to display errors in the form.
-        console.error('Failed to update payment item:', error);
-      }
-    } else {
-      // This case should ideally not be reached in EditItemPage if initialData was correctly loaded.
+  const handleSubmit = async (data: PaymentItemFormData) => {
+    if (typeof data.id !== 'number') {
       console.error("handleSubmit in EditItemPage received data without a valid ID. Cannot update.");
-      // Optionally, set an error state for the form to inform the user.
-      updatePaymentItemMutation.reset();
+      return;
+    }
+    try {
+      await updatePaymentItemMutation.mutateAsync(data as { id: number; [key: string]: any; });
+      navigate('/'); // Navigate to summary page on success
+    } catch (error) {
+      // Error logging is useful for development.
+      // The `isError` and `error` properties of the mutation are used to display errors in the form.
+      console.error('Failed to update payment item:', error);
     }
   };
 

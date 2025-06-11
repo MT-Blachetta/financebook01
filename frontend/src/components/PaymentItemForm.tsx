@@ -24,7 +24,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { PaymentItem, Recipient, Category, CategoryType } from '../types';
+import { PaymentItem, Recipient, Category, CategoryType, PaymentItemFormData } from '../types';
 import { useRecipients, useCategoryTypes, useCategoriesByType } from '../api/hooks';
 
 // Styled components for the form (can be expanded)
@@ -143,7 +143,7 @@ const CategoryTypeSection: React.FC<CategoryTypeSectionProps> = ({ type, selecte
  */
 interface PaymentItemFormProps {
   initialData?: PaymentItem; // Data for pre-filling the form when editing an item
-  onSubmit: (data: Omit<PaymentItem, 'id' | 'recipient'> | PaymentItem) => void; // Function to call on form submission
+  onSubmit: (data: PaymentItemFormData) => void; // Use the specific form data type
   isSubmitting: boolean; // Flag to indicate if the form submission is in progress
   submitError?: string | null; // Optional error message to display if submission fails
 }
@@ -235,10 +235,13 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
       date: new Date(date).toISOString(), // Ensure full ISO string
       periodic,
       recipient_id: selectedRecipientId ? parseInt(selectedRecipientId, 10) : null,
-      categories: selectedCategoryIds.map(id => ({ id } as Category)), // Send as list of objects with id
-      attachment_url: attachmentUrl, // This should be the URL from a successful upload
+      category_ids: selectedCategoryIds, // Send as a list of numbers
+      // The backend model for create/update doesn't have `attachment_url`, but `invoice_path`.
+      // This needs to be aligned. For now, we'll assume a generic name or handle it in the hook.
+      // Let's assume the form data can have `attachment_url` and the hook will map it.
+      attachment_url: attachmentUrl,
     };
-    onSubmit(formData as Omit<PaymentItem, 'id' | 'recipient'> | PaymentItem);
+    onSubmit(formData);
   };
 
   return (

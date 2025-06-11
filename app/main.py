@@ -24,6 +24,9 @@ from sqlmodel import Session, select
 from app.database import create_db_and_tables, get_session
 from app.models import (
     PaymentItem,
+    PaymentItemCreate,
+    PaymentItemRead,
+    PaymentItemUpdate,
     CategoryType,
     Category,
     Recipient,
@@ -42,18 +45,41 @@ def on_startup() -> None:
 # ---------------------------------------------------------------------------
 # Payment Item Endpoints
 # ---------------------------------------------------------------------------
-@app.post("/payment-items", response_model=PaymentItem)
+@app.post("/payment-items", response_model=PaymentItemRead)
 def create_payment_item(
-    item: PaymentItem,
+    item_create: PaymentItemCreate,
     session: Session = Depends(get_session),
 ) -> PaymentItem:
-    session.add(item)
+    # 1. Validate recipient if provided
+    if item_create.recipient_id:
+        recipient = session.get(Recipient, item_create.recipient_id)
+        if not recipient:
+            raise HTTPException(status_code=404, detail=f"Recipient with id {item_create.recipient_id} not found")
+
+    # 2. Validate categories if provided
+    categories = []
+    if item_create.category_ids:
+        for cat_id in item_create.category_ids:
+            category = session.get(Category, cat_id)
+            if not category:
+                raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
+            categories.append(category)
+
+    # 3. Create PaymentItem instance from the payload
+    item_data = item_create.dict(exclude={"category_ids"})
+    db_item = PaymentItem(**item_data)
+    
+    # 4. Add relationships
+    db_item.categories = categories
+
+    # 5. Add to session and commit
+    session.add(db_item)
     session.commit()
-    session.refresh(item)
-    return item
+    session.refresh(db_item)
+    return db_item
 
 
-@app.get("/payment-items", response_model=List[PaymentItem])
+@app.get("/payment-items", response_model=List[PaymentItemRead])
 def list_payment_items(
     expense_only: bool = False,
     income_only: bool = False,
@@ -73,12 +99,17 @@ def list_payment_items(
     # To filter by categories, we need to join PaymentItem with PaymentItemCategoryLink
     # and then filter by the category_id in PaymentItemCategoryLink.
     # We also want distinct payment items if an item belongs to multiple selected categories.
-    query = query.join(PaymentItemCategoryLink).where(PaymentItemCategoryLink.category_id.in_(category_ids)).distinct()
+    # By joining from PaymentItem to the link table, we can filter by category_id.
+    # We must explicitly provide the ON clause for the join.
+    query = query.join(
+        PaymentItemCategoryLink,
+        PaymentItem.id == PaymentItemCategoryLink.payment_item_id
+    ).where(PaymentItemCategoryLink.category_id.in_(category_ids)).distinct()
     
   return session.exec(query).all()
 
 
-@app.get("/payment-items/{item_id}", response_model=PaymentItem)
+@app.get("/payment-items/{item_id}", response_model=PaymentItemRead)
 def get_payment_item(item_id: int, session: Session = Depends(get_session)) -> PaymentItem:
     item = session.get(PaymentItem, item_id)
     if not item:
@@ -86,20 +117,41 @@ def get_payment_item(item_id: int, session: Session = Depends(get_session)) -> P
     return item
 
 
-@app.put("/payment-items/{item_id}", response_model=PaymentItem)
+@app.put("/payment-items/{item_id}", response_model=PaymentItemRead)
 def update_payment_item(
     item_id: int,
-    item_update: PaymentItem,
+    item_update: PaymentItemUpdate,
     session: Session = Depends(get_session),
 ) -> PaymentItem:
     db_item = session.get(PaymentItem, item_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    # 1. Update standard fields
     update_data = item_update.dict(exclude_unset=True)
     for key, value in update_data.items():
-        setattr(db_item, key, value)
+        if key != "category_ids": # Defer category update
+            setattr(db_item, key, value)
 
+    # 2. Validate and update recipient if provided
+    if item_update.recipient_id:
+        recipient = session.get(Recipient, item_update.recipient_id)
+        if not recipient:
+            raise HTTPException(status_code=404, detail=f"Recipient with id {item_update.recipient_id} not found")
+        db_item.recipient_id = item_update.recipient_id
+
+    # 3. Validate and update categories if provided
+    if item_update.category_ids is not None:
+        categories = []
+        if item_update.category_ids: # If list is not empty
+            for cat_id in item_update.category_ids:
+                category = session.get(Category, cat_id)
+                if not category:
+                    raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
+                categories.append(category)
+        db_item.categories = categories # Replace existing categories
+
+    # 4. Commit and refresh
     session.add(db_item)
     session.commit()
     session.refresh(db_item)

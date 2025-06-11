@@ -69,3 +69,18 @@ export interface SummaryTotals {
   totalExpenses: number;
   net: number;
 }
+
+/**
+ * Represents the data structure submitted from the PaymentItemForm.
+ * It uses `category_ids` instead of the full `categories` array of objects.
+ * This aligns with the `PaymentItemCreate` and `PaymentItemUpdate` schemas on the backend.
+ */
+export type PaymentItemFormData = {
+  id?: number;
+  amount: number;
+  date: string;
+  periodic: boolean;
+  recipient_id?: number | null;
+  category_ids?: number[];
+  attachment_url?: string | null;
+};
