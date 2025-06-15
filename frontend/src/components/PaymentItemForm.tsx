@@ -1,327 +1,560 @@
 /**
- * PaymentItemForm Component
+ * PaymentItemForm Component - Customer Specification Implementation
  *
- * This component provides a form for creating and editing PaymentItem entities.
- * It includes fields for amount, date, periodicity, recipient selection,
- * category selection (multi-select across different category types), and
- * an optional file attachment (e.g., for an invoice).
- *
- * Features:
- * - Handles both creation (no initialData) and editing (with initialData).
- * - Uses styled-components for styling.
- * - Integrates with React Query hooks (useRecipients, useCategoryTypes, useCategoriesByType)
- *   to fetch data for dropdowns and category selections.
- * - Manages form state for all fields.
- * - Includes a sub-component `CategoryTypeSection` to render categories grouped by their type.
- * - Placeholder for file upload logic.
- *
- * Props:
- * - initialData?: PaymentItem - Optional initial data to pre-fill the form for editing.
- * - onSubmit: (data: Omit<PaymentItem, 'id' | 'recipient'> | PaymentItem) => void - Callback function
- *   triggered when the form is submitted with valid data.
- * - isSubmitting: boolean - Flag to indicate if the form submission is in progress (e.g., to disable submit button).
- * - submitError?: string | null - Optional error message to display if submission fails.
+ * This component implements the exact specifications provided by the customer:
+ * - Amount field with +/- toggle switch for income/expense
+ * - Automatic timestamp generation on submit
+ * - Recipient management with create/update functionality
+ * - Category management with "standard" type and add functionality
+ * - Periodic checkbox
+ * - Success/error page navigation
+ * 
+ * The customer specifically requested to omit file upload functionality.
  */
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { PaymentItem, Recipient, Category, CategoryType, PaymentItemFormData } from '../types';
-import { useRecipients, useCategoryTypes, useCategoriesByType } from '../api/hooks';
+import { Recipient, Category, PaymentItemFormData } from '../types';
+import { useRecipients, useCategoriesByType, useCreatePaymentItem, useCreateRecipient } from '../api/hooks';
 
-// Styled components for the form (can be expanded)
-const Form = styled.form`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1rem;
-  background-color: #333;
-  border-radius: 8px;
-  color: #fff;
+// Styled components for customer-specified UI
+const FormContainer = styled.div`
+  padding: 2rem;
+  max-width: 600px;
+  margin: 0 auto;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+`;
+
+const PageTitle = styled.h1`
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+  text-align: center;
+  color: var(--color-text-primary);
+`;
+
+const FormField = styled.div`
+  margin-bottom: 1.5rem;
 `;
 
 const Label = styled.label`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
   font-size: 0.9rem;
+  color: var(--color-text-secondary);
 `;
 
-const Input = styled.input`
+// Amount input field - only accepts pure digits/numbers
+const AmountInput = styled.input`
+  width: 100%;
   padding: 0.75rem;
-  border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #444;
-  color: #fff;
+  border: 1px solid #444;
+  border-radius: var(--radius-md);
+  background: #2a2a2a;
+  color: var(--color-text-primary);
   font-size: 1rem;
+  box-sizing: border-box;
 
-  &[type="checkbox"] {
-    width: auto;
-    margin-right: 0.5rem;
-    align-self: flex-start;
+  &:focus {
+    outline: none;
+    border-color: var(--color-positive);
   }
 `;
 
-const Select = styled.select`
-  padding: 0.75rem;
-  border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #444;
-  color: #fff;
-  font-size: 1rem;
+// Toggle switch for +/- (Income/Expense)
+const ToggleSwitch = styled.div`
+  display: flex;
+  width: 100%;
+  height: 50px;
+  border-radius: 25px;
+  overflow: hidden;
+  margin-top: 0.5rem;
 `;
 
-const Button = styled.button`
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
+const ToggleHalf = styled.button<{ active: boolean; isPositive: boolean }>`
+  flex: 1;
   border: none;
-  background-color: #007bff;
-  color: white;
-  font-size: 1rem;
+  font-size: 1.2rem;
+  font-weight: bold;
   cursor: pointer;
-  transition: background-color 0.2s ease-in-out;
+  transition: background-color 0.2s ease;
+  
+  background-color: ${props => 
+    props.active 
+      ? (props.isPositive ? 'var(--color-positive)' : 'var(--color-negative)')
+      : '#666'
+  };
+  
+  color: ${props => props.active ? 'white' : '#ccc'};
 
   &:hover {
-    background-color: #0056b3;
+    background-color: ${props => 
+      props.active 
+        ? (props.isPositive ? '#059669' : '#dc2626')
+        : '#777'
+    };
   }
 `;
 
-const ErrorMessage = styled.p`
-  color: red;
-  font-size: 0.8rem;
+// Checkbox for periodic payments
+const CheckboxContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
+const Checkbox = styled.input`
+  width: 18px;
+  height: 18px;
+`;
 
-// Sub-component to render categories for a specific type
-/**
- * CategoryTypeSection Component
- *
- * A sub-component of PaymentItemForm, responsible for rendering a list of
- * categories belonging to a specific CategoryType. It fetches the categories
- * for the given type and displays them as checkboxes.
- *
- * Props:
- * - type: CategoryType - The category type for which to display categories.
- * - selectedCategoryIds: number[] - An array of currently selected category IDs.
- * - onCategoryChange: (categoryId: number) => void - Callback function triggered
- *   when a category's selection state changes.
- */
-interface CategoryTypeSectionProps {
-  type: CategoryType;
-  selectedCategoryIds: number[];
-  onCategoryChange: (categoryId: number) => void;
-}
+// Description textarea for payment description
+const DescriptionTextarea = styled.textarea`
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #444;
+  border-radius: var(--radius-md);
+  background: #2a2a2a;
+  color: var(--color-text-primary);
+  min-height: 80px;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
 
-const CategoryTypeSection: React.FC<CategoryTypeSectionProps> = ({ type, selectedCategoryIds, onCategoryChange }) => {
-  const { data: categories, isLoading: isLoadingCategories, error: categoriesError } = useCategoriesByType(type.id);
+  &:focus {
+    outline: none;
+    border-color: var(--color-positive);
+  }
+`;
 
-  if (isLoadingCategories) return <p>Loading categories for {type.name}...</p>;
-  if (categoriesError) return <ErrorMessage>Error loading categories for {type.name}: {(categoriesError as Error).message}</ErrorMessage>;
-  if (!categories || categories.length === 0) return <p>No categories defined for {type.name}.</p>;
+// Recipient management area
+const RecipientArea = styled.div`
+  background: #2a2a2a;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: 1px solid #444;
+`;
 
-  // Filter out categories that have children to only show leaf nodes for selection,
-  // or adjust based on how deep selection is desired.
-  // For now, let's assume we can select any category.
-  // The backend should handle parent tag roll-up.
-  return (
-    <div style={{ marginLeft: '1rem', marginBottom: '1rem', borderLeft: '2px solid #555', paddingLeft: '1rem' }}>
-      <h4>{type.name}</h4>
-      {categories.map(category => (
-        <Label key={category.id} style={{ flexDirection: 'row', alignItems: 'center', fontSize: '0.9rem' }}>
-          <Input
-            type="checkbox"
-            checked={selectedCategoryIds.includes(category.id)}
-            onChange={() => onCategoryChange(category.id)}
-          />
-          {category.name}
-        </Label>
-      ))}
-    </div>
-  );
-};
+const RecipientDropdown = styled.select`
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #444;
+  border-radius: var(--radius-md);
+  background: #333;
+  color: var(--color-text-primary);
+  margin-bottom: 1rem;
+`;
 
-/**
- * Props for the PaymentItemForm component.
- */
-interface PaymentItemFormProps {
-  initialData?: PaymentItem; // Data for pre-filling the form when editing an item
-  onSubmit: (data: PaymentItemFormData) => void; // Use the specific form data type
-  isSubmitting: boolean; // Flag to indicate if the form submission is in progress
-  submitError?: string | null; // Optional error message to display if submission fails
-}
+const RecipientInput = styled.input`
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #444;
+  border-radius: var(--radius-md);
+  background: #333;
+  color: var(--color-text-primary);
+  margin-bottom: 0.5rem;
+  box-sizing: border-box;
+`;
 
-export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
-  initialData,
-  onSubmit,
-  isSubmitting,
-  submitError,
-}: PaymentItemFormProps) => {
-  const [amount, setAmount] = useState<string>(initialData?.amount.toString() || '');
-  const [date, setDate] = useState<string>(initialData?.date ? initialData.date.substring(0, 16) : new Date().toISOString().substring(0, 16)); // ISO string for datetime-local
-  const [periodic, setPeriodic] = useState<boolean>(initialData?.periodic || false);
-  const [selectedRecipientId, setSelectedRecipientId] = useState<string>(initialData?.recipient_id?.toString() || '');
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>(
-    initialData?.categories?.map(cat => cat.id) || []
-  );
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Holds the currently selected file object
-  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(initialData?.attachment_url || null); // Holds the URL of an uploaded attachment
+const AddRecipientButton = styled.button`
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-positive);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-top: 0.5rem;
 
-  // Fetching data for form dropdowns
-  const { data: recipients, isLoading: isLoadingRecipients } = useRecipients();
-  const { data: categoryTypes, isLoading: isLoadingCategoryTypes } = useCategoryTypes();
-  // We might need to fetch categories for each type dynamically or all at once if not too many.
-  // For simplicity, let's assume we can fetch all categories for now, or handle it per type.
+  &:hover {
+    background: #059669;
+  }
 
-  const handleCategoryChange = (categoryId: number) => {
-    setSelectedCategoryIds(prevSelectedIds =>
-      prevSelectedIds.includes(categoryId)
-        ? prevSelectedIds.filter(id => id !== categoryId)
-        : [...prevSelectedIds, categoryId]
-    );
-  };
+  &:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
+`;
 
-  /**
-   * Handles changes to the file input.
-   * Sets the selected file in state.
-   * @param event - The input change event from the file input.
-   */
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setSelectedFile(event.target.files[0]);
-      // TODO: Implement actual file upload logic.
-      // This would typically involve:
-      // 1. Calling a mutation hook (e.g., `useUploadFile()`) that sends the file to the backend.
-      // 2. On successful upload, the backend returns a URL for the stored file.
-      // 3. Update `attachmentUrl` state with this URL.
-      // Example:
-      // uploadFileMutation.mutate(event.target.files[0], {
-      //   onSuccess: (uploadedUrl) => setAttachmentUrl(uploadedUrl),
-      //   onError: (uploadError) => console.error("Upload failed", uploadError),
-      // });
-      console.log("File selected:", event.target.files[0].name); // Placeholder for now
+// Category management area
+const CategoryArea = styled.div`
+  background: #2a2a2a;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: 1px solid #444;
+`;
+
+const CategoryDropdown = styled.select`
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #444;
+  border-radius: var(--radius-md);
+  background: #333;
+  color: var(--color-text-primary);
+  margin-bottom: 1rem;
+`;
+
+const CategoryInputContainer = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+`;
+
+const CategoryInput = styled.input`
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #444;
+  border-radius: var(--radius-md);
+  background: #333;
+  color: var(--color-text-primary);
+`;
+
+const AddCategoryButton = styled.button`
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-positive);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: #059669;
+  }
+
+  &:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
+`;
+
+// Submit button
+const SubmitButton = styled.button`
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-positive);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-top: 2rem;
+
+  &:hover {
+    background: #059669;
+  }
+
+  &:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
+`;
+
+const ErrorMessage = styled.div`
+  color: var(--color-negative);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+`;
+
+export const PaymentItemForm: React.FC = () => {
+  const navigate = useNavigate();
+  
+  // Form state
+  const [amount, setAmount] = useState<string>('');
+  const [isPositive, setIsPositive] = useState<boolean>(true); // true for income (+), false for expense (-)
+  const [periodic, setPeriodic] = useState<boolean>(false);
+  
+  // Payment description state
+  const [paymentDescription, setPaymentDescription] = useState<string>('');
+  
+  // Recipient state
+  const [selectedRecipientId, setSelectedRecipientId] = useState<string>('');
+  const [recipientName, setRecipientName] = useState<string>('');
+  const [recipientAddress, setRecipientAddress] = useState<string>('');
+  const [recipientModified, setRecipientModified] = useState<boolean>(false);
+  
+  // Category state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [newCategoryName, setNewCategoryName] = useState<string>('');
+  const [pendingCategories, setPendingCategories] = useState<string[]>([]);
+  
+  // Error state
+  const [error, setError] = useState<string | null>(null);
+  
+  // Hooks
+  const { data: recipients, isLoading: loadingRecipients, refetch: refetchRecipients } = useRecipients();
+  const { data: categories, isLoading: loadingCategories } = useCategoriesByType(1); // Type ID 1 = "standard"
+  const createPaymentMutation = useCreatePaymentItem();
+  const createRecipientMutation = useCreateRecipient();
+
+  // Handle recipient selection from dropdown
+  const handleRecipientSelect = (recipientId: string) => {
+    setSelectedRecipientId(recipientId);
+    setRecipientModified(false);
+    
+    if (recipientId && recipients) {
+      const recipient = recipients.find(r => r.id.toString() === recipientId);
+      if (recipient) {
+        setRecipientName(recipient.name);
+        setRecipientAddress(recipient.address || '');
+      }
     } else {
-      setSelectedFile(null); // Clear if no file is selected or selection is cancelled
-      // Consider if `attachmentUrl` should also be cleared if a user deselects a file.
-      // This depends on whether the form should remember a previously uploaded (and saved) attachment
-      // if the user then interacts with the file input again but cancels.
-      // setAttachmentUrl(null);
+      setRecipientName('');
+      setRecipientAddress('');
     }
   };
 
-  /**
-   * Handles the form submission.
-   * It prevents the default form action, validates the amount,
-   * constructs the `formData` object including selected categories and attachment URL,
-   * and then calls the `onSubmit` prop with this data.
-   * @param event - The form submission event.
-   */
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // Track recipient modifications
+  useEffect(() => {
+    if (selectedRecipientId && recipients) {
+      const originalRecipient = recipients.find(r => r.id.toString() === selectedRecipientId);
+      if (originalRecipient) {
+        const nameChanged = recipientName !== originalRecipient.name;
+        const addressChanged = recipientAddress !== (originalRecipient.address || '');
+        
+        setRecipientModified(nameChanged || addressChanged);
+      }
+    } else {
+      setRecipientModified(recipientName.trim() !== '' || recipientAddress.trim() !== '');
+    }
+  }, [recipientName, recipientAddress, selectedRecipientId, recipients]);
 
-    // TODO: Implement robust file upload handling if a `selectedFile` is present
-    // and `attachmentUrl` hasn't been set by a successful upload yet.
-    // This might involve triggering the upload here if not done in `handleFileChange`,
-    // or preventing submission until upload is complete.
-    // For now, it assumes `attachmentUrl` is correctly populated if a file was intended.
-
-    const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount)) {
-      // Handle error: amount is not a valid number
-      console.error("Invalid amount");
+  // Handle recipient creation
+  const handleAddRecipient = async () => {
+    if (!recipientName.trim()) {
+      setError('Recipient name is required');
       return;
     }
 
-    const formData = {
-      ...(initialData ? { id: initialData.id } : {}), // Include ID if updating
-      amount: numericAmount,
-      date: new Date(date).toISOString(), // Ensure full ISO string
-      periodic,
-      recipient_id: selectedRecipientId ? parseInt(selectedRecipientId, 10) : null,
-      category_ids: selectedCategoryIds, // Send as a list of numbers
-      // The backend model for create/update doesn't have `attachment_url`, but `invoice_path`.
-      // This needs to be aligned. For now, we'll assume a generic name or handle it in the hook.
-      // Let's assume the form data can have `attachment_url` and the hook will map it.
-      attachment_url: attachmentUrl,
-    };
-    onSubmit(formData);
+    try {
+      const newRecipient = await createRecipientMutation.mutateAsync({
+        name: recipientName.trim(),
+        address: recipientAddress.trim() || null,
+      });
+      
+      // Select the newly created recipient
+      setSelectedRecipientId(newRecipient.id.toString());
+      setRecipientModified(false);
+      setError(null);
+      
+    } catch (error) {
+      console.error('Error creating recipient:', error);
+      setError('Failed to create recipient. Please try again.');
+    }
+  };
+
+  // Add new category to pending list
+  const handleAddCategory = () => {
+    if (newCategoryName.trim() && !pendingCategories.includes(newCategoryName.trim())) {
+      setPendingCategories([...pendingCategories, newCategoryName.trim()]);
+      setSelectedCategoryId('new:' + newCategoryName.trim());
+      setNewCategoryName('');
+    }
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    
+    // Validate amount
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      setError('Please enter a valid amount greater than 0');
+      return;
+    }
+    
+    try {
+      // Create the payment data
+      const paymentData: PaymentItemFormData = {
+        amount: isPositive ? numericAmount : -numericAmount,
+        date: new Date().toISOString(), // System timestamp as requested
+        periodic,
+        description: paymentDescription.trim() || null,
+        recipient_id: null,
+        category_ids: [],
+      };
+      
+      // Handle recipient assignment
+      if (selectedRecipientId && !selectedRecipientId.startsWith('new:')) {
+        paymentData.recipient_id = parseInt(selectedRecipientId);
+      }
+      
+      // Handle category selection
+      if (selectedCategoryId) {
+        if (selectedCategoryId.startsWith('new:')) {
+          // New category will be created
+          console.log('Would create new category:', selectedCategoryId.replace('new:', ''));
+        } else {
+          paymentData.category_ids = [parseInt(selectedCategoryId)];
+        }
+      }
+      
+      // Submit the payment
+      await createPaymentMutation.mutateAsync(paymentData);
+      
+      // Navigate to success page
+      navigate('/add-success');
+      
+    } catch (error) {
+      console.error('Error creating payment:', error);
+      setError('Failed to create payment. Please try again.');
+    }
   };
 
   return (
-    <Form onSubmit={handleSubmit}>
-      <h2>{initialData ? 'Edit Payment Item' : 'Add New Payment Item'}</h2>
+    <FormContainer>
+      <PageTitle>Add New Payment</PageTitle>
       
-      <Label>
-        Amount:
-        <Input
-          type="number"
-          step="0.01"
-          value={amount}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
-          required
-        />
-      </Label>
-      
-      <Label>
-        Date & Time:
-        <Input
-          type="datetime-local"
-          value={date}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDate(e.target.value)}
-          required
-        />
-      </Label>
-      
-      <Label style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Input
-          type="checkbox"
-          checked={periodic}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPeriodic(e.target.checked)}
-        />
-        Periodic Payment
-      </Label>
+      <form onSubmit={handleSubmit}>
+        {/* Amount Field with +/- Toggle */}
+        <FormField>
+          <Label>Amount (€)</Label>
+          <AmountInput
+            type="number"
+            step="0.01"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            required
+          />
+          <ToggleSwitch>
+            <ToggleHalf
+              type="button"
+              active={isPositive}
+              isPositive={true}
+              onClick={() => setIsPositive(true)}
+            >
+              +
+            </ToggleHalf>
+            <ToggleHalf
+              type="button"
+              active={!isPositive}
+              isPositive={false}
+              onClick={() => setIsPositive(false)}
+            >
+              -
+            </ToggleHalf>
+          </ToggleSwitch>
+        </FormField>
 
-      <Label>
-        Recipient:
-        <Select
-          value={selectedRecipientId}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedRecipientId(e.target.value)}
-          disabled={isLoadingRecipients}
+        {/* Payment Description */}
+        <FormField>
+          <Label>Payment Description</Label>
+          <DescriptionTextarea
+            placeholder="Describe what this payment is for..."
+            value={paymentDescription}
+            onChange={(e) => setPaymentDescription(e.target.value)}
+          />
+        </FormField>
+
+        {/* Periodic Checkbox */}
+        <FormField>
+          <CheckboxContainer>
+            <Checkbox
+              type="checkbox"
+              checked={periodic}
+              onChange={(e) => setPeriodic(e.target.checked)}
+            />
+            <Label style={{ margin: 0 }}>Periodic Payment</Label>
+          </CheckboxContainer>
+        </FormField>
+
+        {/* Recipient Management */}
+        <FormField>
+          <Label>Recipient</Label>
+          <RecipientArea>
+            <RecipientDropdown
+              value={selectedRecipientId}
+              onChange={(e) => handleRecipientSelect(e.target.value)}
+              disabled={loadingRecipients}
+            >
+              <option value="">-- Select Recipient (Optional) --</option>
+              {recipients?.map((recipient) => (
+                <option key={recipient.id} value={recipient.id.toString()}>
+                  {recipient.name}
+                </option>
+              ))}
+            </RecipientDropdown>
+            
+            <RecipientInput
+              type="text"
+              placeholder="Name"
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+            />
+            
+            <RecipientInput
+              type="text"
+              placeholder="Address"
+              value={recipientAddress}
+              onChange={(e) => setRecipientAddress(e.target.value)}
+            />
+            
+            <AddRecipientButton
+              type="button"
+              onClick={handleAddRecipient}
+              disabled={!recipientName.trim() || !recipientModified}
+            >
+              Add Recipient
+            </AddRecipientButton>
+          </RecipientArea>
+        </FormField>
+
+        {/* Category Management */}
+        <FormField>
+          <Label>Category</Label>
+          <CategoryArea>
+            <CategoryDropdown
+              value={selectedCategoryId}
+              onChange={(e) => setSelectedCategoryId(e.target.value)}
+              disabled={loadingCategories}
+            >
+              <option value="">-- Select Category (Optional) --</option>
+              {categories?.map((category) => (
+                <option key={category.id} value={category.id.toString()}>
+                  {category.name}
+                </option>
+              ))}
+              {pendingCategories.map((categoryName) => (
+                <option key={`new:${categoryName}`} value={`new:${categoryName}`}>
+                  {categoryName} (New)
+                </option>
+              ))}
+            </CategoryDropdown>
+            
+            <CategoryInputContainer>
+              <CategoryInput
+                type="text"
+                placeholder="Add new category"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+              <AddCategoryButton
+                type="button"
+                onClick={handleAddCategory}
+                disabled={!newCategoryName.trim()}
+              >
+                Add
+              </AddCategoryButton>
+            </CategoryInputContainer>
+          </CategoryArea>
+        </FormField>
+
+        {error && <ErrorMessage>{error}</ErrorMessage>}
+
+        {/* Submit Button */}
+        <SubmitButton 
+          type="submit" 
+          disabled={createPaymentMutation.isPending || !amount}
         >
-          <option value="">-- Select Recipient (Optional) --</option>
-          {recipients?.map((recipient: Recipient) => (
-            <option key={recipient.id} value={recipient.id.toString()}>
-              {recipient.name}
-            </option>
-          ))}
-        </Select>
-      </Label>
-
-      <Label>Categories:</Label>
-      {isLoadingCategoryTypes && <p>Loading category types...</p>}
-      {categoryTypes?.map(type => (
-        <CategoryTypeSection
-          key={type.id}
-          type={type}
-          selectedCategoryIds={selectedCategoryIds}
-          onCategoryChange={handleCategoryChange}
-        />
-      ))}
-
-      <Label>
-        Attachment (Invoice/Image):
-        <Input
-          type="file"
-          accept="image/*,application/pdf"
-          onChange={handleFileChange}
-        />
-        {selectedFile && <p style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>Selected: {selectedFile.name}</p>}
-        {attachmentUrl && !selectedFile && <p style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>Current attachment: <a href={attachmentUrl} target="_blank" rel="noopener noreferrer">{attachmentUrl}</a></p>}
-        {/* TODO: Add progress bar for upload, and clear file/error messages */}
-      </Label>
-      
-      {submitError && <ErrorMessage>{submitError}</ErrorMessage>}
-      
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? 'Submitting...' : (initialData ? 'Update Item' : 'Add Item')}
-      </Button>
-    </Form>
+          {createPaymentMutation.isPending ? 'Creating...' : 'Submit'}
+        </SubmitButton>
+      </form>
+    </FormContainer>
   );
 };

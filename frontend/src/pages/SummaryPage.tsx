@@ -1,5 +1,5 @@
 /**
- * “Summary” screen – displays all payment items in a descending timeline with a
+ * "Summary" screen – displays all payment items in a descending timeline with a
  * running total at the end.  Users can filter by incomes/expenses via the
  * NavigationBar.
  *
@@ -11,38 +11,129 @@
  */
 
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { format, parseISO } from 'date-fns';
 
-import { ViewFilter, NavigationBar } from '../components/NavigationBar';
-import { usePaymentItems, useCategoryTypes, useCategoriesByType } from '../api/hooks';
-import { PaymentItem, isExpense, Category, CategoryType } from '../types';
+import { ViewFilter } from '../components/NavigationBar';
+import { usePaymentItems, useAllCategories } from '../api/hooks';
+import { PaymentItem, isExpense, Category } from '../types';
 
 /* -------------------------------------------------------------------------- */
 /* Styled Components                                                          */
 /* -------------------------------------------------------------------------- */
 
-const FilterWrapper = styled.div`
-  padding: 0.5rem 0;
+const CategoryFilterWrapper = styled.div`
+  padding: 1rem;
   margin-bottom: 1rem;
-  border-bottom: 1px solid #333;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  background: #2a2a2a;
+  border-radius: var(--radius-lg);
+  border: 1px solid #444;
 
-  label {
-    font-size: 0.9rem;
-    color: #aaa;
+  h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    color: #eaeaea;
   }
+`;
+
+const CategoryDropdownContainer = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  align-items: center;
 
   select {
+    flex: 1;
     padding: 0.5rem;
-    background-color: #2a2a2a;
+    background-color: #333;
     color: #eaeaea;
-    border: 1px solid #444;
+    border: 1px solid #555;
     border-radius: var(--radius-md);
+    font-size: 0.9rem;
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-positive);
+    }
   }
+`;
+
+const AddCategoryButton = styled.button`
+  background: var(--color-positive);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: #059669;
+  }
+
+  &:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
+`;
+
+const SelectedCategoriesContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  min-height: 2rem;
+  align-items: flex-start;
+`;
+
+const CategoryTag = styled.div`
+  background: #444;
+  color: #eaeaea;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  button {
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+
+    &:hover {
+      color: #fff;
+    }
+  }
+`;
+
+const ResetButton = styled.button`
+  background: #666;
+  color: white;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  cursor: pointer;
+  align-self: flex-end;
+  margin-left: auto;
+
+  &:hover {
+    background: #777;
+  }
+`;
+
+const EmptyState = styled.div`
+  color: #888;
+  font-size: 0.8rem;
+  font-style: italic;
 `;
 
 const List = styled.ul`
@@ -95,7 +186,7 @@ const ContentWrapper = styled.div`
 const MetaInfo = styled.div`
   display: flex;
   flex-direction: column;
-  /* gap: var(--spacing-xs); // Use if multiple meta items */
+  gap: var(--spacing-xs);
 `;
 
 const DateText = styled.span`
@@ -103,6 +194,39 @@ const DateText = styled.span`
   color: var(--color-text-secondary);
   margin-bottom: var(--spacing-sm); /* Space below date */
   display: block; /* Make it a block to take full width above amount in its column */
+`;
+
+const RecipientInfo = styled.div`
+  font-size: 0.8rem;
+  color: #bbb;
+  margin-bottom: var(--spacing-xs);
+  
+  .name {
+    font-weight: 500;
+    color: #ddd;
+  }
+  
+  .address {
+    font-size: 0.75rem;
+    color: #999;
+    margin-top: 2px;
+  }
+`;
+
+const CategoriesInfo = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: var(--spacing-xs);
+`;
+
+const CategoryChip = styled.span`
+  background: #555;
+  color: #ccc;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
 `;
 
 // Container for the Amount, allowing it to be on the right edge of its parent
@@ -138,51 +262,44 @@ const TotalLabel = styled.div`
 
 const SummaryPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   
-  // View Filter (all, expenses, incomes)
-  const initialViewFilter = (searchParams.get('filter') as ViewFilter) || 'all';
-  const [viewFilter, setViewFilter] = useState<ViewFilter>(initialViewFilter);
+  // View Filter (all, expenses, incomes) - always read from URL parameters
+  const viewFilter = (searchParams.get('filter') as ViewFilter) || 'all';
 
   // Category Filter
   const initialCategoryIds = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>(initialCategoryIds);
+  const [selectedDropdownCategory, setSelectedDropdownCategory] = useState<number | ''>('');
 
-  const { data: categoryTypes, isLoading: isLoadingCategoryTypes } = useCategoryTypes();
-  // For simplicity, we'll fetch all categories from all types to populate the filter.
-  // A more optimized approach might load categories on demand or only for selected types.
-  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  // Fetch all categories using the new hook
+  const { data: allCategories = [], isLoading: isLoadingCategories } = useAllCategories();
 
+  // Sync selectedCategoryIds with URL parameters when they change
   useEffect(() => {
-    if (categoryTypes) {
-      const fetchAllCategories = async () => {
-        let fetchedCategories: Category[] = [];
-        for (const type of categoryTypes) {
-          // This is a simplified way; ideally, useCategoriesByType would be called,
-          // but react-query hooks can't be called in a loop directly.
-          // For a real app, consider a different strategy or a custom hook to fetch all categories.
-          // For now, let's assume a hypothetical endpoint or adjust useCategoriesByType if it can fetch all.
-          // As a workaround, we'll just log a TODO and leave allCategories empty for now,
-          // meaning category filtering UI won't be fully populated yet.
-          // TODO: Implement proper fetching of all categories for the filter.
-          // This might involve a new backend endpoint or a more complex client-side aggregation.
-        }
-        // setAllCategories(fetchedCategories); // This line would be used once categories are fetched.
-      };
-      fetchAllCategories();
-    }
-  }, [categoryTypes]);
+    const urlCategoryIds = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    setSelectedCategoryIds(urlCategoryIds);
+  }, [searchParams]);
 
-
-  // Update URL when filters change
+  // Update URL when category filters change (but not view filter - that's handled by App component)
   useEffect(() => {
-    const newSearchParams = new URLSearchParams();
-    if (viewFilter !== 'all') {
-      newSearchParams.set('filter', viewFilter);
-    }
+    const newSearchParams = new URLSearchParams(searchParams);
+    
+    // Remove existing category parameters
+    newSearchParams.delete('categories');
+    
+    // Add current category filters
     selectedCategoryIds.forEach(id => newSearchParams.append('categories', id.toString()));
     
-    setSearchParams(newSearchParams, { replace: true });
-  }, [viewFilter, selectedCategoryIds, setSearchParams]);
+    // Only update if there's actually a change
+    const currentCategoryParams = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    const hasChanged = currentCategoryParams.length !== selectedCategoryIds.length ||
+                      !currentCategoryParams.every(id => selectedCategoryIds.includes(id));
+    
+    if (hasChanged) {
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [selectedCategoryIds, setSearchParams]);
 
   const queryResult = usePaymentItems({
     expenseOnly: viewFilter === 'expenses',
@@ -213,23 +330,28 @@ const SummaryPage: React.FC = () => {
     );
   }, [paymentDataForMemo]);
 
+  // Get selected categories for display
+  const selectedCategories = useMemo(() => {
+    return allCategories.filter(cat => selectedCategoryIds.includes(cat.id));
+  }, [allCategories, selectedCategoryIds]);
+
   /* ---------------------------------------------------------------------- */
   /* Callbacks                                                              */
   /* ---------------------------------------------------------------------- */
-  const handleViewFilterChange = useCallback((f: ViewFilter) => {
-    setViewFilter(f);
+  const handleAddCategory = useCallback(() => {
+    if (selectedDropdownCategory && !selectedCategoryIds.includes(selectedDropdownCategory as number)) {
+      setSelectedCategoryIds(prev => [...prev, selectedDropdownCategory as number]);
+      setSelectedDropdownCategory('');
+    }
+  }, [selectedDropdownCategory, selectedCategoryIds]);
+
+  const handleRemoveCategory = useCallback((categoryId: number) => {
+    setSelectedCategoryIds(prev => prev.filter(id => id !== categoryId));
   }, []);
 
-  const handleCategoryFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const options = event.target.options;
-    const value: number[] = [];
-    for (let i = 0, l = options.length; i < l; i++) {
-      if (options[i].selected) {
-        value.push(parseInt(options[i].value, 10));
-      }
-    }
-    setSelectedCategoryIds(value);
-  };
+  const handleResetFilters = useCallback(() => {
+    setSelectedCategoryIds([]);
+  }, []);
 
   const handleMenu = useCallback(() => {
     // TODO: open side-drawer with additional navigation
@@ -237,6 +359,10 @@ const SummaryPage: React.FC = () => {
     // eslint-disable-next-line no-console
     console.info('Menu clicked');
   }, []);
+
+  const handleAdd = useCallback(() => {
+    navigate('/add');
+  }, [navigate]);
 
   /* ---------------------------------------------------------------------- */
   /* Render                                                                 */
@@ -246,40 +372,55 @@ const SummaryPage: React.FC = () => {
 
   return (
     <>
-      <NavigationBar
-        active={viewFilter}
-        onChange={handleViewFilterChange}
-        onMenu={handleMenu}
-      />
+      <CategoryFilterWrapper>
+        <h3>Filter by Categories</h3>
+        
+        <CategoryDropdownContainer>
+          <select
+            value={selectedDropdownCategory}
+            onChange={(e) => setSelectedDropdownCategory(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+            disabled={isLoadingCategories}
+          >
+            <option value="">Select a category...</option>
+            {allCategories
+              .filter(cat => !selectedCategoryIds.includes(cat.id))
+              .map(cat => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))
+            }
+          </select>
+          <AddCategoryButton
+            onClick={handleAddCategory}
+            disabled={!selectedDropdownCategory || isLoadingCategories}
+          >
+            Add Category
+          </AddCategoryButton>
+        </CategoryDropdownContainer>
 
-      <FilterWrapper>
-        <label htmlFor="category-filter">Filter by Categories:</label>
-        {/* TODO: Replace with a better multi-select component. This is a basic HTML multi-select. */}
-        {/* Also, populate this with actual categories once fetching is implemented. */}
-        <select
-          id="category-filter"
-          multiple
-          value={selectedCategoryIds.map(String)} // Select expects string values
-          onChange={handleCategoryFilterChange}
-          disabled={isLoadingCategoryTypes || allCategories.length === 0} // Disable if loading or no categories
-        >
-          {/* This is a placeholder. Real categories should be mapped here. */}
-          {/* Example:
-            {allCategories.map(cat => (
-              <option key={cat.id} value={cat.id.toString()}>{cat.name} ({categoryTypes.find(ct => ct.id === cat.type_id)?.name})</option>
-            ))}
-          */}
-          {allCategories.length === 0 && !isLoadingCategoryTypes && <option disabled>No categories available to filter</option>}
-          {/* For testing, add some dummy options if allCategories is empty */}
-          {allCategories.length === 0 && (
+        <SelectedCategoriesContainer>
+          {selectedCategories.length === 0 ? (
+            <EmptyState>No category filters applied - showing all payments</EmptyState>
+          ) : (
             <>
-              <option value="1">Dummy Category 1</option>
-              <option value="2">Dummy Category 2</option>
+              {selectedCategories.map(cat => (
+                <CategoryTag key={cat.id}>
+                  {cat.name}
+                  <button onClick={() => handleRemoveCategory(cat.id)} aria-label={`Remove ${cat.name} filter`}>
+                    ×
+                  </button>
+                </CategoryTag>
+              ))}
+              <ResetButton onClick={handleResetFilters}>
+                Reset All
+              </ResetButton>
             </>
           )}
-        </select>
-        {isLoadingCategoryTypes && <p>Loading categories for filter...</p>}
-      </FilterWrapper>
+        </SelectedCategoriesContainer>
+
+        {isLoadingCategories && <p>Loading categories...</p>}
+      </CategoryFilterWrapper>
 
       {isLoading ? (
         <p>Loading payment items…</p>
@@ -333,12 +474,35 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item }) => {
         <MetaInfo>
           {/* Date is above the amount (in its own block) */}
           <DateText>{format(parseISO(item.date), 'PPP, HH:mm')}</DateText>
-          {/* Other meta information like recipient name could go here if desired */}
-          {item.recipient && <span style={{fontSize: '0.8em', color: '#aaa'}}>To/From: {item.recipient.name}</span>}
+          
+          {/* Payment description */}
+          {item.description && (
+            <RecipientInfo>
+              <div className="name" style={{ fontStyle: 'italic', color: '#ddd' }}>
+                {item.description}
+              </div>
+            </RecipientInfo>
+          )}
+          
+          {/* Enhanced recipient information display */}
+          {item.recipient && (
+            <RecipientInfo>
+              <div className="name">To/From: {item.recipient.name}</div>
+              {item.recipient.address && (
+                <div className="address">{item.recipient.address}</div>
+              )}
+            </RecipientInfo>
+          )}
+          
+          {/* Enhanced categories display */}
           {item.categories && item.categories.length > 0 && (
-            <div style={{fontSize: '0.7em', color: '#999', marginTop: '4px'}}>
-              Categories: {item.categories.map(c => c.name).join(', ')}
-            </div>
+            <CategoriesInfo>
+              {item.categories.map(category => (
+                <CategoryChip key={category.id}>
+                  {category.name}
+                </CategoryChip>
+              ))}
+            </CategoriesInfo>
           )}
         </MetaInfo>
         <AmountContainer>

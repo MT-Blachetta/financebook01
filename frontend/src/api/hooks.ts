@@ -223,6 +223,20 @@ export function useCategoriesByType(typeId: number | undefined) {
 }
 
 /**
+ * Fetch all categories regardless of their type.
+ * @returns React-Query result object for the list of all categories.
+ */
+export function useAllCategories() {
+  return useQuery<Category[], Error>({
+    queryKey: ['all-categories'],
+    queryFn: async () => {
+      const res = await api.get<Category[]>('/categories');
+      return res.data;
+    },
+  });
+}
+
+/**
  * Fetch a category and its full children tree by its ID.
  * @param categoryId - The ID of the category. Query is disabled if undefined.
  * @returns React-Query result object for the category tree.

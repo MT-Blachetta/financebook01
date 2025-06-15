@@ -13,7 +13,6 @@
 export interface Recipient {
   id: number;
   name: string;
-  description?: string | null;
   address?: string | null;
 }
 
@@ -45,8 +44,9 @@ export interface CategoryType {
 export interface PaymentItem {
   id: number;
   amount: number; // stored in decimal(10,2) on the server
-  date: string; // ISO-8601 (“2025-06-06T13:37:00+02:00”)
+  date: string; // ISO-8601 ("2025-06-06T13:37:00+02:00")
   periodic: boolean;
+  description?: string | null; // Description of what this payment is for
 
   // Relations
   recipient_id?: number | null;
@@ -80,6 +80,7 @@ export type PaymentItemFormData = {
   amount: number;
   date: string;
   periodic: boolean;
+  description?: string | null;
   recipient_id?: number | null;
   category_ids?: number[];
   attachment_url?: string | null;

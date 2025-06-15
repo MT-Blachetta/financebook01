@@ -5,13 +5,13 @@
  *   – Top-level navigation (persistent)
  *   – <Outlet /> for nested routes
  *
- * Individual screens such as the “Summary” page are lazy-loaded to keep the
+ * Individual screens such as the "Summary" page are lazy-loaded to keep the
  * initial bundle small.  React-Router will automatically code-split when using
  * `lazy()` + `Suspense`.
  */
 
 import React, { lazy, Suspense, useState, useCallback } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 
 import { NavigationBar, ViewFilter } from './components/NavigationBar';
@@ -25,6 +25,7 @@ import { NavigationBar, ViewFilter } from './components/NavigationBar';
 const SummaryPage = lazy(() => import('./pages/SummaryPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const AddItemPage = lazy(() => import('./pages/AddItemPage')); // Page for creating new payment items
+const AddSuccessPage = lazy(() => import('./pages/AddSuccessPage')); // Success page after creating payment
 const EditItemPage = lazy(() => import('./pages/EditItemPage')); // Page for editing existing payment items
 const CategoryManagerPage = lazy(() => import('./pages/CategoryManagerPage')); // Page for managing categories and types
 
@@ -54,11 +55,12 @@ const Content = styled.main`
 // ---------------------------------------------------------------------------
 
 const App: React.FC = () => {
-  // For the global navigation bar, filter state might not be directly relevant,
-  // or it could navigate to the summary page with a filter.
-  // For now, providing a dummy state and handler.
   const navigate = useNavigate();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false); // State to control the visibility of the navigation drawer
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
+  // Get current filter from URL to show active state in navigation
+  const [searchParams] = useSearchParams();
+  const currentFilter = (searchParams.get('filter') as ViewFilter) || 'all';
 
   /**
    * Handles filter changes from the global NavigationBar.
@@ -67,7 +69,11 @@ const App: React.FC = () => {
    * @param filter - The selected ViewFilter ('all', 'expenses', 'incomes').
    */
   const handleGlobalNavFilterChange = (filter: ViewFilter) => {
-    navigate(`/?filter=${filter}`); // Example: navigate to summary with filter
+    if (filter === 'all') {
+      navigate('/');
+    } else {
+      navigate(`/?filter=${filter}`);
+    }
     setIsDrawerOpen(false);
   };
 
@@ -78,6 +84,15 @@ const App: React.FC = () => {
   const handleMenuClick = useCallback(() => {
     setIsDrawerOpen(prev => !prev);
   }, []);
+
+  /**
+   * Handles the ADD button click from the NavigationBar.
+   * Navigates to the Add Payment page.
+   */
+  const handleAddClick = useCallback(() => {
+    navigate('/add');
+    setIsDrawerOpen(false);
+  }, [navigate]);
 
   /**
    * A simple placeholder component for the navigation drawer.
@@ -102,7 +117,7 @@ const App: React.FC = () => {
       <h3>Menu</h3>
       <ul style={{ listStyle: 'none', padding: 0 }}>
         <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/'); setIsDrawerOpen(false); }}>Summary</button></li>
-        <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/payment/new'); setIsDrawerOpen(false); }}>Add Payment</button></li>
+        <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/add'); setIsDrawerOpen(false); }}>Add Payment</button></li>
         <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/categories'); setIsDrawerOpen(false); }}>Manage Categories</button></li>
         {/* Add more links as needed, e.g., Settings */}
       </ul>
@@ -113,9 +128,10 @@ const App: React.FC = () => {
   return (
     <Wrapper>
       <NavigationBar
-        active={'all'} // Default or non-interactive for global bar
-        onChange={handleGlobalNavFilterChange} // Placeholder or global filter handler
-        onMenu={handleMenuClick} // This will toggle the drawer
+        active={currentFilter}
+        onChange={handleGlobalNavFilterChange}
+        onMenu={handleMenuClick}
+        onAdd={handleAddClick}
       />
       <NavigationDrawer />
 
@@ -126,6 +142,8 @@ const App: React.FC = () => {
             <Route path="/" element={<SummaryPage />} />
             
             {/* Routes for creating and editing payment items */}
+            <Route path="/add" element={<AddItemPage />} />
+            <Route path="/add-success" element={<AddSuccessPage />} />
             <Route path="/payment/new" element={<AddItemPage />} />
             <Route path="/payment/:id/edit" element={<EditItemPage />} />
             

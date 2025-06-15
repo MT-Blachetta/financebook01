@@ -38,8 +38,29 @@ app = FastAPI(title="FinanceBook API", version="0.1.0")
 
 @app.on_event("startup")
 def on_startup() -> None:
-    """Create tables on first run."""
+    """Create tables on first run and initialize default data."""
     create_db_and_tables()
+    initialize_default_data()
+
+
+def initialize_default_data() -> None:
+    """Initialize default data like the 'standard' category type."""
+    from app.database import engine
+    with Session(engine) as session:
+        # Check if 'standard' category type already exists
+        standard_type = session.exec(
+            select(CategoryType).where(CategoryType.name == "standard")
+        ).first()
+        
+        if not standard_type:
+            # Create the default 'standard' category type
+            standard_type = CategoryType(
+                name="standard",
+                description="Default category type for basic expense/income classification"
+            )
+            session.add(standard_type)
+            session.commit()
+            session.refresh(standard_type)
 
 
 # ---------------------------------------------------------------------------
@@ -57,25 +78,30 @@ def create_payment_item(
             raise HTTPException(status_code=404, detail=f"Recipient with id {item_create.recipient_id} not found")
 
     # 2. Validate categories if provided
-    categories = []
+    category_ids = []
     if item_create.category_ids:
         for cat_id in item_create.category_ids:
             category = session.get(Category, cat_id)
             if not category:
                 raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
-            categories.append(category)
+            category_ids.append(cat_id)
 
     # 3. Create PaymentItem instance from the payload
     item_data = item_create.dict(exclude={"category_ids"})
     db_item = PaymentItem(**item_data)
-    
-    # 4. Add relationships
-    db_item.categories = categories
 
-    # 5. Add to session and commit
+    # 4. Add to session and commit
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
+    
+    # 5. Add category links if provided
+    if category_ids:
+        for cat_id in category_ids:
+            link = PaymentItemCategoryLink(payment_item_id=db_item.id, category_id=cat_id)
+            session.add(link)
+        session.commit()
+
     return db_item
 
 
@@ -216,6 +242,12 @@ def list_categories_by_type(
     type_id: int, session: Session = Depends(get_session)
 ) -> List[Category]:
     return session.exec(select(Category).where(Category.type_id == type_id)).all()
+
+
+@app.get("/categories", response_model=List[Category])
+def list_all_categories(session: Session = Depends(get_session)) -> List[Category]:
+    """Get all categories regardless of their type."""
+    return session.exec(select(Category)).all()
 
 
 # ---------------------------------------------------------------------------

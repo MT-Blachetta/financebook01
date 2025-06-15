@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
 
 ###############################################################################
 # Association table (many-to-many) between PaymentItem and Category
@@ -91,7 +91,6 @@ class Recipient(SQLModel, table=True):
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
-    description: Optional[str] = None
     address: Optional[str] = None
 
 
@@ -103,13 +102,14 @@ class PaymentItemBase(SQLModel):
     -----------
     • Negative `amount`  → Expense  (money out)
     • Positive `amount`  → Income   (money in)
-    • `timestamp` uses UTC for simplicity; the UI can localise as needed.
+    • `date` uses ISO format for API consistency with frontend
     • `periodic=True` marks template items that spawn future instances via
       scheduled jobs (not yet implemented).
     """
     amount: float  # Use DECIMAL in production to avoid rounding errors
-    timestamp: datetime
+    date: datetime  # Changed from timestamp to date for frontend compatibility
     periodic: bool = False
+    description: Optional[str] = None  # Description of what this payment is for
 
     # Optional attachments (local path or S3 URL – persisted by upload endpoints)
     invoice_path: Optional[str] = None
@@ -139,8 +139,9 @@ class PaymentItemUpdate(PaymentItemBase):
     All fields are optional for partial updates.
     """
     amount: Optional[float] = None
-    timestamp: Optional[datetime] = None
+    date: Optional[datetime] = None
     periodic: Optional[bool] = None
+    description: Optional[str] = None
     invoice_path: Optional[str] = None
     product_image_path: Optional[str] = None
     recipient_id: Optional[int] = None

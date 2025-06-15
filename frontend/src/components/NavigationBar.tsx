@@ -31,6 +31,9 @@ interface NavigationBarProps {
 
   /** Callback when user clicks the hamburger icon. */
   onMenu(): void;
+
+  /** Optional callback when user clicks the ADD button. */
+  onAdd?(): void;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -77,6 +80,27 @@ const Filters = styled.nav`
   }
 `;
 
+const AddButton = styled.button`
+  background: var(--color-positive);
+  color: white;
+  border: none;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: #059669; /* Darker green on hover */
+  }
+
+  @media (max-width: 640px) {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.8rem;
+  }
+`;
+
 const MenuButton = styled.button`
   display: none; /* hidden on desktop */
   background: transparent;
@@ -95,6 +119,12 @@ const MenuButton = styled.button`
   }
 `;
 
+const RightSection = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+`;
+
 /* -------------------------------------------------------------------------- */
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -103,6 +133,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
   active,
   onChange,
   onMenu,
+  onAdd,
 }) => {
   return (
     <Bar>
@@ -129,9 +160,16 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
         </button>
       </Filters>
 
-      <MenuButton aria-label="Open Menu" onClick={onMenu}>
-        <img src={menuIconUrl} alt="Menu" />
-      </MenuButton>
+      <RightSection>
+        {onAdd && (
+          <AddButton onClick={onAdd}>
+            ADD
+          </AddButton>
+        )}
+        <MenuButton aria-label="Open Menu" onClick={onMenu}>
+          <img src={menuIconUrl} alt="Menu" />
+        </MenuButton>
+      </RightSection>
     </Bar>
   );
 };
