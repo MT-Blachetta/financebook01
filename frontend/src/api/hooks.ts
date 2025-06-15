@@ -317,3 +317,19 @@ export function useCreateRecipient() {
     },
   });
 }
+
+/**
+ * Fetch a single recipient by ID.
+ * @param recipientId - ID of the recipient to fetch.
+ */
+export function useRecipient(recipientId: number | undefined) {
+  return useQuery<Recipient, Error>({
+    queryKey: ['recipient', recipientId],
+    queryFn: async () => {
+      if (recipientId === undefined) throw new Error('Recipient ID is undefined');
+      const res = await api.get<Recipient>(`/recipients/${recipientId}`);
+      return res.data;
+    },
+    enabled: recipientId !== undefined,
+  });
+}

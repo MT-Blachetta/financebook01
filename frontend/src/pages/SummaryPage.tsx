@@ -16,7 +16,7 @@ import styled from 'styled-components';
 import { format, parseISO } from 'date-fns';
 
 import { ViewFilter } from '../components/NavigationBar';
-import { usePaymentItems, useAllCategories } from '../api/hooks';
+import { usePaymentItems, useAllCategories, useRecipient } from '../api/hooks';
 import { PaymentItem, isExpense, Category } from '../types';
 
 /* -------------------------------------------------------------------------- */
@@ -458,6 +458,8 @@ interface PaymentItemLineProps {
 const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item }) => {
   // Using attachment_url for the image as per PaymentItem type
   const imageUrl = item.attachment_url;
+  const { data: fetchedRecipient } = useRecipient(item.recipient_id);
+  const recipient = item.recipient ?? fetchedRecipient;
 
   return (
     <Entry>
@@ -485,11 +487,11 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item }) => {
           )}
           
           {/* Enhanced recipient information display */}
-          {item.recipient && (
+          {recipient && (
             <RecipientInfo>
-              <div className="name">To/From: {item.recipient.name}</div>
-              {item.recipient.address && (
-                <div className="address">{item.recipient.address}</div>
+              <div className="name">To/From: {recipient.name}</div>
+              {recipient.address && (
+                <div className="address">{recipient.address}</div>
               )}
             </RecipientInfo>
           )}
