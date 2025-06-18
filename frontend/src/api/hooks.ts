@@ -276,6 +276,34 @@ export function useCreateCategory() {
   });
 }
 
+/**
+ * Provides a mutation hook for updating an existing category.
+ * Invalidates relevant queries on success.
+ */
+export function useUpdateCategory(categoryId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<Category, Error, Partial<Category>>({
+    mutationFn: async (updated: Partial<Category>) => {
+      const res = await api.put<Category>(`/categories/${categoryId}`, updated);
+      return res.data;
+    },
+    onSuccess: (data: Category) => {
+      queryClient.invalidateQueries({ queryKey: ['categories-by-type', data.type_id] });
+      queryClient.invalidateQueries({ queryKey: ['category-tree', data.id] });
+      queryClient.invalidateQueries({ queryKey: ['all-categories'] });
+    },
+  });
+}
+
+export async function uploadCategoryIcon(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await api.post<{ filename: string }>('/uploadicon/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data.filename;
+}
+
 // Note: Update/Delete for Categories might be complex due to tree structure
 // and potential cascading effects. For now, focusing on creation and reads.
 // The backend API currently doesn't expose PUT/DELETE for /categories/{id}

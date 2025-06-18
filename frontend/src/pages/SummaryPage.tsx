@@ -16,7 +16,7 @@ import styled from 'styled-components';
 import { format, parseISO } from 'date-fns';
 
 import { ViewFilter } from '../components/NavigationBar';
-import { usePaymentItems, useAllCategories, useRecipient } from '../api/hooks';
+import { usePaymentItems, useAllCategories, useCategoryTypes, useRecipient } from '../api/hooks';
 import { PaymentItem, isExpense, Category } from '../types';
 
 /* -------------------------------------------------------------------------- */
@@ -274,6 +274,8 @@ const SummaryPage: React.FC = () => {
 
   // Fetch all categories using the new hook
   const { data: allCategories = [], isLoading: isLoadingCategories } = useAllCategories();
+  const { data: categoryTypes = [] } = useCategoryTypes();
+  const standardTypeId = useMemo(() => categoryTypes.find(t => t.name === 'standard')?.id, [categoryTypes]);
 
   // Sync selectedCategoryIds with URL parameters when they change
   useEffect(() => {
@@ -431,7 +433,12 @@ const SummaryPage: React.FC = () => {
       ) : (
         <List>
           {sorted.map(item => (
-            <PaymentItemLine key={item.id} item={item} />
+            <PaymentItemLine
+              key={item.id}
+              item={item}
+              allCategories={allCategories}
+              standardTypeId={standardTypeId}
+            />
           ))}
 
           {/* Total row */}
@@ -457,19 +464,28 @@ export default SummaryPage;
 
 interface PaymentItemLineProps {
   item: PaymentItem;
+  allCategories: Category[];
+  standardTypeId: number | undefined;
 }
 
-const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item }) => {
+const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, standardTypeId }) => {
   // Using attachment_url for the image as per PaymentItem type
   const imageUrl = item.attachment_url;
   const { data: fetchedRecipient } = useRecipient(item.recipient_id);
   const recipient = item.recipient ?? fetchedRecipient;
 
   const iconUrl = React.useMemo(() => {
-    if (!item.categories) return null;
-    const withIcon = item.categories.find(c => c.icon_file);
-    return withIcon ? `/api/download_static/${withIcon.icon_file}` : null;
-  }, [item.categories]);
+    if (!item.categories || !standardTypeId) return null;
+    const cat = item.categories.find(c => c.type_id === standardTypeId);
+    let current = cat;
+    while (current) {
+      if (current.icon_file) {
+        return `/api/download_static/${current.icon_file}`;
+      }
+      current = allCategories.find(c => c.id === current?.parent_id) || undefined;
+    }
+    return null;
+  }, [item.categories, standardTypeId, allCategories]);
 
   return (
     <Entry>

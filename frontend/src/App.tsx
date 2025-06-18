@@ -27,7 +27,8 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const AddItemPage = lazy(() => import('./pages/AddItemPage')); // Page for creating new payment items
 const AddSuccessPage = lazy(() => import('./pages/AddSuccessPage')); // Success page after creating payment
 const EditItemPage = lazy(() => import('./pages/EditItemPage')); // Page for editing existing payment items
-const CategoryManagerPage = lazy(() => import('./pages/CategoryManagerPage')); // Page for managing categories and types
+const CategoryManagerPage = lazy(() => import('./pages/CategoryManagerPage')); // Page for managing category types
+const CategoryEditPage = lazy(() => import('./pages/CategoryEditPage')); // Page for managing categories
 
 // ---------------------------------------------------------------------------
 // Layout
@@ -118,7 +119,8 @@ const App: React.FC = () => {
       <ul style={{ listStyle: 'none', padding: 0 }}>
         <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/'); setIsDrawerOpen(false); }}>Summary</button></li>
         <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/add'); setIsDrawerOpen(false); }}>Add Payment</button></li>
-        <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/categories'); setIsDrawerOpen(false); }}>Manage Categories</button></li>
+        <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/categories'); setIsDrawerOpen(false); }}>Categories</button></li>
+        <li style={{ marginBottom: '10px' }}><button onClick={() => { navigate('/category-types'); setIsDrawerOpen(false); }}>Category Types</button></li>
         {/* Add more links as needed, e.g., Settings */}
       </ul>
     </div>
@@ -132,6 +134,7 @@ const App: React.FC = () => {
         onChange={handleGlobalNavFilterChange}
         onMenu={handleMenuClick}
         onAdd={handleAddClick}
+        onCategories={() => navigate('/categories')}
       />
       <NavigationDrawer />
 
@@ -148,7 +151,8 @@ const App: React.FC = () => {
             <Route path="/payment/:id/edit" element={<EditItemPage />} />
             
             {/* Route for managing categories */}
-            <Route path="/categories" element={<CategoryManagerPage />} />
+            <Route path="/categories" element={<CategoryEditPage />} />
+            <Route path="/category-types" element={<CategoryManagerPage />} />
             
             {/* Fallback routes for 404 and unmatched paths */}
             <Route path="/404" element={<NotFoundPage />} />
