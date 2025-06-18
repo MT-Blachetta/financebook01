@@ -15,7 +15,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { Recipient, Category, PaymentItemFormData } from '../types';
-import { useRecipients, useCategoriesByType, useCreatePaymentItem, useCreateRecipient } from '../api/hooks';
+import {
+  useRecipients,
+  useCategoriesByType,
+  useCreatePaymentItem,
+  useCreateRecipient,
+  useCreateCategory,
+} from '../api/hooks';
 
 // Styled components for customer-specified UI
 const FormContainer = styled.div`
@@ -279,7 +285,6 @@ export const PaymentItemForm: React.FC = () => {
   // Category state
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [newCategoryName, setNewCategoryName] = useState<string>('');
-  const [pendingCategories, setPendingCategories] = useState<string[]>([]);
   
   // Error state
   const [error, setError] = useState<string | null>(null);
@@ -289,6 +294,7 @@ export const PaymentItemForm: React.FC = () => {
   const { data: categories, isLoading: loadingCategories } = useCategoriesByType(1); // Type ID 1 = "standard"
   const createPaymentMutation = useCreatePaymentItem();
   const createRecipientMutation = useCreateRecipient();
+  const createCategoryMutation = useCreateCategory();
 
   // Handle recipient selection from dropdown
   const handleRecipientSelect = (recipientId: string) => {
@@ -346,12 +352,21 @@ export const PaymentItemForm: React.FC = () => {
     }
   };
 
-  // Add new category to pending list
-  const handleAddCategory = () => {
-    if (newCategoryName.trim() && !pendingCategories.includes(newCategoryName.trim())) {
-      setPendingCategories([...pendingCategories, newCategoryName.trim()]);
-      setSelectedCategoryId('new:' + newCategoryName.trim());
+  // Create a new category immediately and select it
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    try {
+      const newCat = await createCategoryMutation.mutateAsync({
+        name,
+        type_id: 1, // default category type
+        parent_id: null,
+      });
+      setSelectedCategoryId(newCat.id.toString());
       setNewCategoryName('');
+    } catch (err) {
+      console.error('Error creating category:', err);
+      setError('Failed to create category. Please try again.');
     }
   };
 
@@ -385,12 +400,7 @@ export const PaymentItemForm: React.FC = () => {
       
       // Handle category selection
       if (selectedCategoryId) {
-        if (selectedCategoryId.startsWith('new:')) {
-          // New category will be created
-          console.log('Would create new category:', selectedCategoryId.replace('new:', ''));
-        } else {
-          paymentData.category_ids = [parseInt(selectedCategoryId)];
-        }
+        paymentData.category_ids = [parseInt(selectedCategoryId)];
       }
       
       // Submit the payment
@@ -518,11 +528,6 @@ export const PaymentItemForm: React.FC = () => {
               {categories?.map((category) => (
                 <option key={category.id} value={category.id.toString()}>
                   {category.name}
-                </option>
-              ))}
-              {pendingCategories.map((categoryName) => (
-                <option key={`new:${categoryName}`} value={`new:${categoryName}`}>
-                  {categoryName} (New)
                 </option>
               ))}
             </CategoryDropdown>

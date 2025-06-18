@@ -264,3 +264,14 @@ def create_recipient(recipient: Recipient, session: Session = Depends(get_sessio
 @app.get("/recipients", response_model=List[Recipient])
 def list_recipients(session: Session = Depends(get_session)) -> List[Recipient]:
     return session.exec(select(Recipient)).all()
+
+
+@app.get("/recipients/{recipient_id}", response_model=Recipient)
+def get_recipient(
+    recipient_id: int, session: Session = Depends(get_session)
+) -> Recipient:
+    """Fetch a single recipient by its ID."""
+    recipient = session.get(Recipient, recipient_id)
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    return recipient
