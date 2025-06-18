@@ -372,6 +372,10 @@ const SummaryPage: React.FC = () => {
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h2>Payments</h2>
+        <button onClick={() => navigate('/categories')}>categories</button>
+      </div>
       <CategoryFilterWrapper>
         <h3>Filter by Categories</h3>
         
@@ -461,6 +465,12 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item }) => {
   const { data: fetchedRecipient } = useRecipient(item.recipient_id);
   const recipient = item.recipient ?? fetchedRecipient;
 
+  const iconUrl = React.useMemo(() => {
+    if (!item.categories) return null;
+    const withIcon = item.categories.find(c => c.icon_file);
+    return withIcon ? `/api/download_static/${withIcon.icon_file}` : null;
+  }, [item.categories]);
+
   return (
     <Entry>
       <ImageHolder>
@@ -508,6 +518,9 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item }) => {
           )}
         </MetaInfo>
         <AmountContainer>
+          {iconUrl && (
+            <img src={iconUrl} alt="category icon" style={{ width: '20px', height: '20px', marginRight: '0.25rem' }} />
+          )}
           <AmountText negative={isExpense(item)}>
             {item.amount.toFixed(2)} €
           </AmountText>
