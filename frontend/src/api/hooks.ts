@@ -276,6 +276,18 @@ export function useCreateCategory() {
   });
 }
 
+/** Upload an icon image for a category. */
+export function useUploadCategoryIcon() {
+  return useMutation<{ filename: string }, Error, FormData>({
+    mutationFn: async (data: FormData) => {
+      const res = await api.post<{ filename: string }>('/uploadicon/', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data;
+    },
+  });
+}
+
 // Note: Update/Delete for Categories might be complex due to tree structure
 // and potential cascading effects. For now, focusing on creation and reads.
 // The backend API currently doesn't expose PUT/DELETE for /categories/{id}

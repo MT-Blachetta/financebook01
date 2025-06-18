@@ -94,6 +94,11 @@ const App: React.FC = () => {
     setIsDrawerOpen(false);
   }, [navigate]);
 
+  const handleCategoriesClick = useCallback(() => {
+    navigate('/categories');
+    setIsDrawerOpen(false);
+  }, [navigate]);
+
   /**
    * A simple placeholder component for the navigation drawer.
    * In a real application, this would be a more robust and styled component,
@@ -132,6 +137,7 @@ const App: React.FC = () => {
         onChange={handleGlobalNavFilterChange}
         onMenu={handleMenuClick}
         onAdd={handleAddClick}
+        onCategories={handleCategoriesClick}
       />
       <NavigationDrawer />
 

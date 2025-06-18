@@ -34,6 +34,9 @@ interface NavigationBarProps {
 
   /** Optional callback when user clicks the ADD button. */
   onAdd?(): void;
+
+  /** Optional callback when user clicks the Categories button. */
+  onCategories?(): void;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -134,6 +137,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
   onChange,
   onMenu,
   onAdd,
+  onCategories,
 }) => {
   return (
     <Bar>
@@ -164,6 +168,11 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
         {onAdd && (
           <AddButton onClick={onAdd}>
             ADD
+          </AddButton>
+        )}
+        {onCategories && (
+          <AddButton onClick={onCategories}>
+            categories
           </AddButton>
         )}
         <MenuButton aria-label="Open Menu" onClick={onMenu}>

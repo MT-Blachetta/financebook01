@@ -18,7 +18,9 @@ Endpoint overview
 
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
+import os
 from sqlmodel import Session, select
 
 from app.database import create_db_and_tables, get_session
@@ -34,6 +36,10 @@ from app.models import (
 )
 
 app = FastAPI(title="FinanceBook API", version="0.1.0")
+
+# Directory to store uploaded category icons
+ICON_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploaded_icons")
+os.makedirs(ICON_UPLOAD_DIR, exist_ok=True)
 
 
 @app.on_event("startup")
@@ -248,6 +254,28 @@ def list_categories_by_type(
 def list_all_categories(session: Session = Depends(get_session)) -> List[Category]:
     """Get all categories regardless of their type."""
     return session.exec(select(Category)).all()
+
+
+# ---------------------------------------------------------------------------
+# Icon Upload/Download Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/uploadicon/")
+async def upload_icon(file: UploadFile = File(...)):
+    """Save uploaded icon file and return its filename."""
+    file_path = os.path.join(ICON_UPLOAD_DIR, file.filename)
+    with open(file_path, "wb") as f:
+        contents = await file.read()
+        f.write(contents)
+    return {"filename": file.filename}
+
+
+@app.get("/download_static/{filename}")
+def download_static(filename: str):
+    """Serve uploaded static files."""
+    file_path = os.path.join(ICON_UPLOAD_DIR, filename)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
 
 # ---------------------------------------------------------------------------
