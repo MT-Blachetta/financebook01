@@ -81,6 +81,15 @@ class Category(SQLModel, table=True):
     icon_file: Optional[str] = None
 
 
+class CategoryUpdate(SQLModel):
+    """Schema for updating an existing category."""
+    name: Optional[str] = None
+    type_id: Optional[int] = None
+    parent_id: Optional[int] = None
+    icon_file: Optional[str] = None
+
+
+
 ###############################################################################
 # Core business entities
 ###############################################################################

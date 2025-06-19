@@ -32,6 +32,7 @@ from app.models import (
     PaymentItemUpdate,
     CategoryType,
     Category,
+    CategoryUpdate,
     Recipient,
     PaymentItemCategoryLink, # Import for joining
 )
@@ -236,6 +237,35 @@ def create_category(category: Category, session: Session = Depends(get_session))
         raise HTTPException(status_code=404, detail="Parent category not found")
     if not session.get(CategoryType, category.type_id):
         raise HTTPException(status_code=404, detail="Category type not found")
+
+    session.add(category)
+    session.commit()
+    session.refresh(category)
+    return category
+
+
+@app.put("/categories/{category_id}", response_model=Category)
+def update_category(
+    category_id: int,
+    category_update: CategoryUpdate,
+    session: Session = Depends(get_session),
+) -> Category:
+    category = session.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    update_data = category_update.dict(exclude_unset=True)
+
+    if "parent_id" in update_data and update_data["parent_id"] is not None:
+        if not session.get(Category, update_data["parent_id"]):
+            raise HTTPException(status_code=404, detail="Parent category not found")
+
+    if "type_id" in update_data and update_data["type_id"] is not None:
+        if not session.get(CategoryType, update_data["type_id"]):
+            raise HTTPException(status_code=404, detail="Category type not found")
+
+    for key, value in update_data.items():
+        setattr(category, key, value)
 
     session.add(category)
     session.commit()

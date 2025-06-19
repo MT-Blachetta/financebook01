@@ -69,14 +69,16 @@ Navigate to the project root directory (`financebook01`).
 
 1.  **Create a virtual environment (recommended):**
     ```bash
-    python -m venv venv
-    source .venv/bin/activate  # On Windows: venv\Scripts\activate
+    python -m venv .venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
 2.  **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
-    The `requirements.txt` file should include `fastapi`, `uvicorn`, `sqlmodel`, etc.
+The `requirements.txt` file should include `fastapi`, `uvicorn`, `sqlmodel`, etc.
+If you get a "uvicorn: command not found" error, ensure the virtual environment is activated
+and the dependencies were installed with `pip install -r requirements.txt`.
 
 **Running the backend server:**
 
