@@ -374,9 +374,20 @@ const SummaryPage: React.FC = () => {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          gap: '0.5rem',
+        }}
+      >
         <h2>Payments</h2>
-        <button onClick={() => navigate('/categories')}>categories</button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={() => navigate('/category-types')}>Category Types</button>
+          <button onClick={() => navigate('/categories')}>Categories</button>
+        </div>
       </div>
       <CategoryFilterWrapper>
         <h3>Filter by Categories</h3>
