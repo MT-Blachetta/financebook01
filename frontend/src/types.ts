@@ -26,6 +26,7 @@ export interface Category {
   name: string;
   type_id: number;
   parent_id?: number | null;
+  icon_file?: string | null;
   children?: Category[]; // FastAPI includes nested sets
 }
 

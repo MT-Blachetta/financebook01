@@ -18,7 +18,10 @@ Endpoint overview
 
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
+from pathlib import Path
+import shutil
 from sqlmodel import Session, select
 
 from app.database import create_db_and_tables, get_session
@@ -29,11 +32,16 @@ from app.models import (
     PaymentItemUpdate,
     CategoryType,
     Category,
+    CategoryUpdate,
     Recipient,
     PaymentItemCategoryLink, # Import for joining
 )
 
 app = FastAPI(title="FinanceBook API", version="0.1.0")
+
+# Directory where uploaded category icon files are stored
+ICON_DIR = Path("icons")
+ICON_DIR.mkdir(exist_ok=True)
 
 
 @app.on_event("startup")
@@ -80,10 +88,14 @@ def create_payment_item(
     # 2. Validate categories if provided
     category_ids = []
     if item_create.category_ids:
+        seen_types = set()
         for cat_id in item_create.category_ids:
             category = session.get(Category, cat_id)
             if not category:
                 raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
+            if category.type_id in seen_types:
+                raise HTTPException(status_code=400, detail="Only one category per type is allowed")
+            seen_types.add(category.type_id)
             category_ids.append(cat_id)
 
     # 3. Create PaymentItem instance from the payload
@@ -169,13 +181,17 @@ def update_payment_item(
     # 3. Validate and update categories if provided
     if item_update.category_ids is not None:
         categories = []
-        if item_update.category_ids: # If list is not empty
+        seen_types = set()
+        if item_update.category_ids:  # If list is not empty
             for cat_id in item_update.category_ids:
                 category = session.get(Category, cat_id)
                 if not category:
                     raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
+                if category.type_id in seen_types:
+                    raise HTTPException(status_code=400, detail="Only one category per type is allowed")
+                seen_types.add(category.type_id)
                 categories.append(category)
-        db_item.categories = categories # Replace existing categories
+        db_item.categories = categories  # Replace existing categories
 
     # 4. Commit and refresh
     session.add(db_item)
@@ -221,6 +237,35 @@ def create_category(category: Category, session: Session = Depends(get_session))
         raise HTTPException(status_code=404, detail="Parent category not found")
     if not session.get(CategoryType, category.type_id):
         raise HTTPException(status_code=404, detail="Category type not found")
+
+    session.add(category)
+    session.commit()
+    session.refresh(category)
+    return category
+
+
+@app.put("/categories/{category_id}", response_model=Category)
+def update_category(
+    category_id: int,
+    category_update: CategoryUpdate,
+    session: Session = Depends(get_session),
+) -> Category:
+    category = session.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    update_data = category_update.dict(exclude_unset=True)
+
+    if "parent_id" in update_data and update_data["parent_id"] is not None:
+        if not session.get(Category, update_data["parent_id"]):
+            raise HTTPException(status_code=404, detail="Parent category not found")
+
+    if "type_id" in update_data and update_data["type_id"] is not None:
+        if not session.get(CategoryType, update_data["type_id"]):
+            raise HTTPException(status_code=404, detail="Category type not found")
+
+    for key, value in update_data.items():
+        setattr(category, key, value)
 
     session.add(category)
     session.commit()
@@ -275,3 +320,24 @@ def get_recipient(
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
     return recipient
+
+
+# ---------------------------------------------------------------------------
+# File Upload/Download Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/uploadicon/")
+def upload_icon(file: UploadFile = File(...)) -> dict:
+    """Save an uploaded icon file and return its filename."""
+    file_path = ICON_DIR / file.filename
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"filename": file.filename}
+
+
+@app.get("/download_static/{filename}")
+def download_icon(filename: str) -> FileResponse:
+    """Serve an uploaded icon file."""
+    file_path = ICON_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)

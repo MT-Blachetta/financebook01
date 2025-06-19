@@ -77,6 +77,18 @@ class Category(SQLModel, table=True):
     # Recursive parent pointer (nullable for root nodes)
     parent_id: Optional[int] = Field(default=None, foreign_key="category.id")
 
+    # Optional filename of an icon associated with this category
+    icon_file: Optional[str] = None
+
+
+class CategoryUpdate(SQLModel):
+    """Schema for updating an existing category."""
+    name: Optional[str] = None
+    type_id: Optional[int] = None
+    parent_id: Optional[int] = None
+    icon_file: Optional[str] = None
+
+
 
 ###############################################################################
 # Core business entities
