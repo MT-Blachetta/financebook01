@@ -272,6 +272,7 @@ export function useCreateCategory() {
         queryClient.invalidateQueries({ queryKey: ['category-tree', data.parent_id] });
       }
       // Invalidate general category listings if any exist
+      queryClient.invalidateQueries({ queryKey: ['all-categories'] });
     },
   });
 }
