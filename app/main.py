@@ -70,6 +70,20 @@ def initialize_default_data() -> None:
             session.commit()
             session.refresh(standard_type)
 
+        # Create default 'UNCLASSIFIED' category if it doesn't exist
+        unclassified = session.exec(
+            select(Category).where(Category.name == "UNCLASSIFIED")
+        ).first()
+        if not unclassified:
+            unclassified = Category(
+                name="UNCLASSIFIED",
+                type_id=standard_type.id,
+                parent_id=None,
+            )
+            session.add(unclassified)
+            session.commit()
+
+
 
 # ---------------------------------------------------------------------------
 # Payment Item Endpoints
@@ -88,6 +102,7 @@ def create_payment_item(
     # 2. Validate categories if provided
     category_ids = []
     if item_create.category_ids:
+
         seen_types = set()
         for cat_id in item_create.category_ids:
             category = session.get(Category, cat_id)
@@ -97,6 +112,11 @@ def create_payment_item(
                 raise HTTPException(status_code=400, detail="Only one category per type is allowed")
             seen_types.add(category.type_id)
             category_ids.append(cat_id)
+    else:
+        # Assign the default UNCLASSIFIED category
+        default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
+        if default_cat:
+            category_ids.append(default_cat.id)
 
     # 3. Create PaymentItem instance from the payload
     item_data = item_create.dict(exclude={"category_ids"})
@@ -191,6 +211,10 @@ def update_payment_item(
                     raise HTTPException(status_code=400, detail="Only one category per type is allowed")
                 seen_types.add(category.type_id)
                 categories.append(category)
+        else:
+            default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
+            if default_cat:
+                categories.append(default_cat)
         db_item.categories = categories  # Replace existing categories
 
     # 4. Commit and refresh
@@ -282,7 +306,22 @@ def get_category_tree(category_id: int, session: Session = Depends(get_session))
     return category
 
 
+@app.get("/categories/{category_id}/descendants", response_model=List[Category])
+def list_category_descendants(category_id: int, session: Session = Depends(get_session)) -> List[Category]:
+    root = session.get(Category, category_id)
+    if not root:
+        raise HTTPException(status_code=404, detail="Category not found")
+    descendants: List[Category] = []
+    queue = [category_id]
+    while queue:
+        current = queue.pop(0)
+        children = session.exec(select(Category).where(Category.parent_id == current)).all()
+        for child in children:
+            descendants.append(child)
+            queue.append(child.id)
+    return descendants
 @app.get("/categories/by-type/{type_id}", response_model=List[Category])
+
 def list_categories_by_type(
     type_id: int, session: Session = Depends(get_session)
 ) -> List[Category]:

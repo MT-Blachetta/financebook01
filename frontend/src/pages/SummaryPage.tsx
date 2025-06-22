@@ -332,9 +332,8 @@ const SummaryPage: React.FC = () => {
     );
   }, [paymentDataForMemo]);
 
-  // Get selected categories for display
   const selectedCategories = useMemo(() => {
-    return allCategories.filter(cat => selectedCategoryIds.includes(cat.id));
+    return allCategories.filter(cat => cat.name !== "UNCLASSIFIED" && selectedCategoryIds.includes(cat.id));
   }, [allCategories, selectedCategoryIds]);
 
   /* ---------------------------------------------------------------------- */
@@ -400,7 +399,7 @@ const SummaryPage: React.FC = () => {
           >
             <option value="">Select a category...</option>
             {allCategories
-              .filter(cat => !selectedCategoryIds.includes(cat.id))
+              .filter(cat => cat.name !== "UNCLASSIFIED" && !selectedCategoryIds.includes(cat.id))
               .map(cat => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
