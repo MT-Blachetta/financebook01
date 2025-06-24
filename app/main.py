@@ -70,6 +70,20 @@ def initialize_default_data() -> None:
             session.commit()
             session.refresh(standard_type)
 
+        # Create default 'UNCLASSIFIED' category if it doesn't exist
+        unclassified = session.exec(
+            select(Category).where(Category.name == "UNCLASSIFIED")
+        ).first()
+        if not unclassified:
+            unclassified = Category(
+                name="UNCLASSIFIED",
+                type_id=standard_type.id,
+                parent_id=None,
+            )
+            session.add(unclassified)
+            session.commit()
+
+
 
 # ---------------------------------------------------------------------------
 # Payment Item Endpoints
@@ -88,6 +102,7 @@ def create_payment_item(
     # 2. Validate categories if provided
     category_ids = []
     if item_create.category_ids:
+
         seen_types = set()
         for cat_id in item_create.category_ids:
             category = session.get(Category, cat_id)
@@ -97,6 +112,11 @@ def create_payment_item(
                 raise HTTPException(status_code=400, detail="Only one category per type is allowed")
             seen_types.add(category.type_id)
             category_ids.append(cat_id)
+    else:
+        # Assign the default UNCLASSIFIED category
+        default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
+        if default_cat:
+            category_ids.append(default_cat.id)
 
     # 3. Create PaymentItem instance from the payload
     item_data = item_create.dict(exclude={"category_ids"})
@@ -124,27 +144,43 @@ def list_payment_items(
     category_ids: Optional[List[int]] = Query(None, description="List of category IDs to filter by"),
     session: Session = Depends(get_session),
 ) -> List[PaymentItem]:
-  if expense_only and income_only:
-    raise HTTPException(status_code=400, detail="Choose only one filter: expense_only or income_only")
+    if expense_only and income_only:
+        raise HTTPException(status_code=400, detail="Choose only one filter: expense_only or income_only")
 
-  query = select(PaymentItem)
-  if expense_only:
-    query = query.where(PaymentItem.amount < 0)
-  if income_only:
-    query = query.where(PaymentItem.amount > 0)
-  
-  if category_ids:
-    # To filter by categories, we need to join PaymentItem with PaymentItemCategoryLink
-    # and then filter by the category_id in PaymentItemCategoryLink.
-    # We also want distinct payment items if an item belongs to multiple selected categories.
-    # By joining from PaymentItem to the link table, we can filter by category_id.
-    # We must explicitly provide the ON clause for the join.
-    query = query.join(
-        PaymentItemCategoryLink,
-        PaymentItem.id == PaymentItemCategoryLink.payment_item_id
-    ).where(PaymentItemCategoryLink.category_id.in_(category_ids)).distinct()
-    
-  return session.exec(query).all()
+    query = select(PaymentItem)
+    if expense_only:
+        query = query.where(PaymentItem.amount < 0)
+    if income_only:
+        query = query.where(PaymentItem.amount > 0)
+
+    if category_ids:
+        # Expand the category list with all descendants so filtering a parent
+        # category also returns items tagged with any of its children.
+        expanded_ids: set[int] = set(category_ids)
+
+        def gather_descendants(root_id: int) -> None:
+            queue = [root_id]
+            while queue:
+                current = queue.pop(0)
+                children = session.exec(select(Category.id).where(Category.parent_id == current)).all()
+                for child_id in children:
+                    if child_id not in expanded_ids:
+                        expanded_ids.add(child_id)
+                        queue.append(child_id)
+
+        for cat_id in list(category_ids):
+            gather_descendants(cat_id)
+
+        query = (
+            query.join(
+                PaymentItemCategoryLink,
+                PaymentItem.id == PaymentItemCategoryLink.payment_item_id,
+            )
+            .where(PaymentItemCategoryLink.category_id.in_(expanded_ids))
+            .distinct()
+        )
+
+    return session.exec(query).all()
 
 
 @app.get("/payment-items/{item_id}", response_model=PaymentItemRead)
@@ -191,6 +227,10 @@ def update_payment_item(
                     raise HTTPException(status_code=400, detail="Only one category per type is allowed")
                 seen_types.add(category.type_id)
                 categories.append(category)
+        else:
+            default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
+            if default_cat:
+                categories.append(default_cat)
         db_item.categories = categories  # Replace existing categories
 
     # 4. Commit and refresh
@@ -282,7 +322,22 @@ def get_category_tree(category_id: int, session: Session = Depends(get_session))
     return category
 
 
+@app.get("/categories/{category_id}/descendants", response_model=List[Category])
+def list_category_descendants(category_id: int, session: Session = Depends(get_session)) -> List[Category]:
+    root = session.get(Category, category_id)
+    if not root:
+        raise HTTPException(status_code=404, detail="Category not found")
+    descendants: List[Category] = []
+    queue = [category_id]
+    while queue:
+        current = queue.pop(0)
+        children = session.exec(select(Category).where(Category.parent_id == current)).all()
+        for child in children:
+            descendants.append(child)
+            queue.append(child.id)
+    return descendants
 @app.get("/categories/by-type/{type_id}", response_model=List[Category])
+
 def list_categories_by_type(
     type_id: int, session: Session = Depends(get_session)
 ) -> List[Category]:

@@ -252,6 +252,21 @@ export function useCategoryTree(categoryId: number | undefined) {
     enabled: categoryId !== undefined,
   });
 }
+/**
+ * Fetch all descendants of a category by its ID.
+ */
+export function useCategoryDescendants(categoryId: number | undefined) {
+  return useQuery<Category[], Error>({
+    queryKey: ["category-descendants", categoryId],
+    queryFn: async () => {
+      if (categoryId === undefined) throw new Error("Category ID is undefined");
+      const res = await api.get<Category[]>(`/categories/${categoryId}/descendants`);
+      return res.data;
+    },
+    enabled: categoryId !== undefined,
+  });
+}
+
 
 /**
  * Provides a mutation hook for creating a new category.

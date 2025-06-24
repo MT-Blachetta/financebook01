@@ -525,7 +525,7 @@ export const PaymentItemForm: React.FC = () => {
               disabled={loadingCategories}
             >
               <option value="">-- Select Category (Optional) --</option>
-              {categories?.map((category) => (
+              {categories?.filter(cat => cat.name !== "UNCLASSIFIED").map((category) => (
                 <option key={category.id} value={category.id.toString()}>
                   {category.name}
                 </option>
