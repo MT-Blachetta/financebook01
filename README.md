@@ -12,16 +12,23 @@ This project was taken over mid-development. This README describes its current s
     *   Items are classified as "Income" (positive amount) or "Expense" (negative amount).
 *   **Category Management**:
     *   Define custom "Category Types" (e.g., "Spending Area", "Payment Method").
-    *   Create categories under these types. (Full tree management UI is pending).
+    *   Create and edit nested categories under these types. Each category may
+        optionally have a PNG icon uploaded via the API.
+    *   A default `UNCLASSIFIED` category is created on first run so that every
+        payment item has at least one tag.
 *   **Recipient Management**:
     *   Create and list recipients (persons or organizations).
 *   **Filtering**:
     *   Filter payment items on the summary page by "All", "Incomes", or "Expenses".
-    *   Backend support for filtering by category IDs is implemented. URL parameter handling for category filters is in place on the frontend, with UI for selection pending full category data loading.
+    *   Filter by one or more categories. The backend expands selected
+        categories to include all of their descendants so parent selections work
+        intuitively.
 *   **User Interface**:
-    *   A summary page listing all payment items, sorted by date, with a running total.
-    *   Forms for adding and editing payment items.
-    *   A basic page for managing category types.
+    *   A summary page listing all payment items, sorted by date, with a running
+        total and optional category filters.
+    *   Forms for adding and editing payment items. Successful creation leads to
+        a short confirmation page.
+    *   Pages for managing category types **and** the category tree itself.
     *   Navigation drawer for accessing different sections.
 
 ## Project Structure
@@ -30,7 +37,19 @@ The project is divided into two main parts: a Python/FastAPI backend and a React
 
 ### Backend (`/app` directory)
 
-*   **`main.py`**: Contains all FastAPI routes (API endpoints) for payment items, categories, category types, and recipients. It handles HTTP requests, data validation, and interaction with the database via SQLModel.
+*   **`main.py`**: Contains all FastAPI routes for payment items, categories,
+    category types, and recipients.  Notable endpoints include:
+    *   `POST /payment-items` – create a payment record.
+    *   `GET /payment-items` – list items with optional income/expense and
+        category filters.
+    *   `POST /uploadicon/` and `GET /download_static/{filename}` – upload and
+        retrieve PNG icons for categories.
+    *   `GET /categories/{id}/descendants` – fetch the full subtree of a
+        category.
+    *   `GET /categories/by-type/{type_id}` – list categories belonging to a
+        specific category type.
+    The module handles HTTP requests, data validation and interaction with the
+    database via SQLModel.
 *   **`models.py`**: Defines the data structures (SQLModel classes) for `PaymentItem`, `Category`, `CategoryType`, `Recipient`, and the association table `PaymentItemCategoryLink`. These models map directly to database tables and are used for request/response validation.
 *   **`database.py`**: Manages database connection (SQLite by default) and table creation using SQLModel.
 *   **`financebook.db`**: The SQLite database file (created on first run).
@@ -45,10 +64,11 @@ The project is divided into two main parts: a Python/FastAPI backend and a React
         *   **`NavigationBar.tsx`**: Top navigation bar with filtering options and menu trigger.
         *   **`PaymentItemForm.tsx`**: Form used for creating and editing payment items, including recipient and category selection, and attachment input.
     *   **`pages/`**: Components representing different views/pages of the application.
-        *   **`SummaryPage.tsx`**: Displays the list of payment items, totals, and filtering options.
-        *   **`AddItemPage.tsx`**: Page for creating a new payment item.
-        *   **`EditItemPage.tsx`**: Page for editing an existing payment item.
-        *   **`CategoryManagerPage.tsx`**: Page for managing category types (category tree management is a TODO).
+        *   **`SummaryPage.tsx`**: Displays the list of payment items, totals and filtering options.
+        *   **`AddItemPage.tsx`** / **`AddSuccessPage.tsx`**: Create a new payment and show a confirmation screen.
+        *   **`EditItemPage.tsx`**: Edit an existing payment item.
+        *   **`CategoryManagerPage.tsx`**: Manage category types.
+        *   **`CategoryEditPage.tsx`**: Full CRUD interface for categories including icon upload.
         *   **`NotFoundPage.tsx`**: 404 error page.
     *   **`types.ts`**: TypeScript interfaces defining the shape of data objects (e.g., `PaymentItem`, `Category`) shared across the frontend, mirroring backend models.
     *   **`styles/globalStyle.ts`**: Global CSS styles and theme variables.
@@ -140,11 +160,15 @@ The frontend application will be available at `http://localhost:5173` (or anothe
 
 ## Further Development & TODOs
 
-*   **Complete Category Management**: Implement the `CategoryTreeDisplay` component for full CRUD operations on nested categories.
-*   **Implement File Uploads**: Add a backend endpoint for file uploads and integrate it with the `PaymentItemForm`.
-*   **Refine Filtering**: Fully implement category selection for filtering on the `SummaryPage`.
+*   **Attachment Uploads**: The backend supports uploading PNG icons for
+    categories, but payment item attachments (invoices, product images) are still
+    TODO.
+*   **Category Tree Visualisation**: The current editor is functional but could
+    benefit from a more intuitive drag-and-drop tree view.
 *   **User Authentication & Authorization**: Secure the application.
-*   **Advanced Reporting & Visualization**: Add charts and reports for financial analysis.
-*   **Testing**: Implement unit and integration tests for both backend and frontend.
+*   **Advanced Reporting & Visualization**: Add charts and reports for financial
+    analysis.
+*   **Testing**: Implement unit and integration tests for both backend and
+    frontend.
 *   **Deployment**: Document deployment procedures for production environments.
-*   **UI/UX Polish**: Continue refining the user interface and experience based on the "modern design" requirement.
+*   **UI/UX Polish**: Continue refining the user interface and experience.
