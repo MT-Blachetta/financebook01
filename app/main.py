@@ -144,27 +144,43 @@ def list_payment_items(
     category_ids: Optional[List[int]] = Query(None, description="List of category IDs to filter by"),
     session: Session = Depends(get_session),
 ) -> List[PaymentItem]:
-  if expense_only and income_only:
-    raise HTTPException(status_code=400, detail="Choose only one filter: expense_only or income_only")
+    if expense_only and income_only:
+        raise HTTPException(status_code=400, detail="Choose only one filter: expense_only or income_only")
 
-  query = select(PaymentItem)
-  if expense_only:
-    query = query.where(PaymentItem.amount < 0)
-  if income_only:
-    query = query.where(PaymentItem.amount > 0)
-  
-  if category_ids:
-    # To filter by categories, we need to join PaymentItem with PaymentItemCategoryLink
-    # and then filter by the category_id in PaymentItemCategoryLink.
-    # We also want distinct payment items if an item belongs to multiple selected categories.
-    # By joining from PaymentItem to the link table, we can filter by category_id.
-    # We must explicitly provide the ON clause for the join.
-    query = query.join(
-        PaymentItemCategoryLink,
-        PaymentItem.id == PaymentItemCategoryLink.payment_item_id
-    ).where(PaymentItemCategoryLink.category_id.in_(category_ids)).distinct()
-    
-  return session.exec(query).all()
+    query = select(PaymentItem)
+    if expense_only:
+        query = query.where(PaymentItem.amount < 0)
+    if income_only:
+        query = query.where(PaymentItem.amount > 0)
+
+    if category_ids:
+        # Expand the category list with all descendants so filtering a parent
+        # category also returns items tagged with any of its children.
+        expanded_ids: set[int] = set(category_ids)
+
+        def gather_descendants(root_id: int) -> None:
+            queue = [root_id]
+            while queue:
+                current = queue.pop(0)
+                children = session.exec(select(Category.id).where(Category.parent_id == current)).all()
+                for child_id in children:
+                    if child_id not in expanded_ids:
+                        expanded_ids.add(child_id)
+                        queue.append(child_id)
+
+        for cat_id in list(category_ids):
+            gather_descendants(cat_id)
+
+        query = (
+            query.join(
+                PaymentItemCategoryLink,
+                PaymentItem.id == PaymentItemCategoryLink.payment_item_id,
+            )
+            .where(PaymentItemCategoryLink.category_id.in_(expanded_ids))
+            .distinct()
+        )
+
+    return session.exec(query).all()
 
 
 @app.get("/payment-items/{item_id}", response_model=PaymentItemRead)
