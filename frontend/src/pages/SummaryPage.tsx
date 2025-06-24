@@ -262,12 +262,12 @@ const AmountContainer = styled.div`
 `;
 
 // This is the text for the amount.
-const AmountText = styled.span<{ negative: boolean }>`
+const AmountText = styled.span<{ $negative: boolean }>`
   font-size: 1.5rem; // This sets the font size.
   font-weight: bold; // This makes the font bold.
   // This sets the text color to red for expenses and green for incomes.
-  color: ${({ negative }) =>
-    negative ? 'var(--color-negative)' : 'var(--color-positive)'};
+  color: ${({ $negative }) =>
+    $negative ? 'var(--color-negative)' : 'var(--color-positive)'};
   display: block; // This makes the amount take up its own line.
 `;
 
@@ -498,7 +498,7 @@ const SummaryPage: React.FC = () => {
           <TotalEntry>
             <TotalLabel>SUM</TotalLabel>
             <AmountContainer>
-              <AmountText negative={total < 0}>
+              <AmountText $negative={total < 0}>
                 {total.toFixed(2)} €
               </AmountText>
             </AmountContainer>
@@ -594,7 +594,7 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
           {iconUrl && (
             <img src={iconUrl} alt="category icon" style={{ width: '20px', height: '20px', marginRight: '0.25rem' }} />
           )}
-          <AmountText negative={isExpense(item)}>
+          <AmountText $negative={isExpense(item)}>
             {item.amount.toFixed(2)} €
           </AmountText>
         </AmountContainer>
