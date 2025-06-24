@@ -18,86 +18,98 @@
  * - Add functionality to edit and delete categories within a type's tree.
  * - Enhance UI for better user experience in managing complex category structures.
  */
+// This section brings in the tools we need to build this page.
 import React, { useState } from 'react';
+// This is a tool that lets us create and style our own components.
 import styled from 'styled-components';
-import { CategoryType, Category } from '../types'; // Category might be used by CategoryTreeDisplay
+// This imports the data structures we use for category types and categories.
+import { CategoryType, Category } from '../types';
+// This imports the functions that let us fetch and create category types.
 import {
   useCategoryTypes,
   useCreateCategoryType,
-  // useCategoriesByType, // Will be used by CategoryTreeDisplay or similar
-  // useCreateCategory    // Will be used by CategoryTreeDisplay or similar
 } from '../api/hooks';
 
+// This is the main container for our page.
 const PageWrapper = styled.div`
-  padding: 1rem;
-  color: #eaeaea;
+  padding: 1rem; // This adds some space around the content.
+  color: #eaeaea; // This sets the text color.
 `;
 
+// This is the title for each section of the page.
 const SectionTitle = styled.h2`
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid #555;
-  padding-bottom: 0.5rem;
+  margin-top: 2rem; // This adds some space above the title.
+  margin-bottom: 1rem; // This adds some space below the title.
+  border-bottom: 1px solid #555; // This adds a line below the title.
+  padding-bottom: 0.5rem; // This adds some space below the line.
 `;
 
+// This is the list that will contain our category types.
 const List = styled.ul`
-  list-style: none;
-  padding: 0;
+  list-style: none; // This removes the default bullet points.
+  padding: 0; // This removes the default padding.
 `;
 
+// This is an item in our list of category types.
 const ListItem = styled.li`
-  background-color: #2a2a2a;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
-  border-radius: 4px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  background-color: #2a2a2a; // This sets the background color.
+  padding: 0.75rem 1rem; // This adds some space inside the item.
+  margin-bottom: 0.5rem; // This adds some space below the item.
+  border-radius: 4px; // This rounds the corners of the item.
+  display: flex; // This arranges the content of the item in a flexible way.
+  justify-content: space-between; // This spreads out the content to fill the available space.
+  align-items: center; // This vertically aligns the content in the center.
 `;
 
+// This is the form for adding a new category type.
 const Form = styled.form`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background-color: #333;
-  border-radius: 8px;
+  display: flex; // This arranges the form fields in a flexible way.
+  flex-direction: column; // This stacks the form fields vertically.
+  gap: 0.5rem; // This adds some space between the form fields.
+  margin-bottom: 1.5rem; // This adds some space below the form.
+  padding: 1rem; // This adds some space inside the form.
+  background-color: #333; // This sets the background color.
+  border-radius: 8px; // This rounds the corners of the form.
 `;
 
+// This is an input field in our form.
 const Input = styled.input`
-  padding: 0.75rem;
-  border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #444;
-  color: #fff;
-  font-size: 1rem;
+  padding: 0.75rem; // This adds some space inside the input field.
+  border-radius: 4px; // This rounds the corners of the input field.
+  border: 1px solid #555; // This adds a border around the input field.
+  background-color: #444; // This sets the background color.
+  color: #fff; // This sets the text color to white.
+  font-size: 1rem; // This sets the font size.
 `;
 
+// This is a button in our form.
 const Button = styled.button`
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
-  border: none;
-  background-color: #007bff;
-  color: white;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease-in-out;
-  align-self: flex-start;
+  padding: 0.75rem 1.5rem; // This adds some space inside the button.
+  border-radius: 4px; // This rounds the corners of the button.
+  border: none; // This removes the button border.
+  background-color: #007bff; // This sets the background color to blue.
+  color: white; // This sets the text color to white.
+  font-size: 1rem; // This sets the font size.
+  cursor: pointer; // This shows a hand cursor when you hover over the button.
+  transition: background-color 0.2s ease-in-out; // This creates a smooth color change on hover.
+  align-self: flex-start; // This aligns the button to the left.
 
+  // This makes the button a darker blue when you hover over it.
   &:hover {
     background-color: #0056b3;
   }
 
+  // This styles the button when it's disabled.
   &:disabled {
-    background-color: #555;
-    cursor: not-allowed;
+    background-color: #555; // This sets a grey background color.
+    cursor: not-allowed; // This shows a "not allowed" cursor.
   }
 `;
 
+// This is the message we show if there's an error.
 const ErrorMessage = styled.p`
-  color: red;
-  font-size: 0.8rem;
+  color: red; // This sets the text color to red.
+  font-size: 0.8rem; // This sets the font size.
 `;
 
 // TODO: Component for displaying and managing individual category trees
@@ -112,47 +124,55 @@ const ErrorMessage = styled.p`
 //   return <div>Tree for type {typeId}</div>;
 // };
 
+// This is the main component for our category manager page.
 const CategoryManagerPage: React.FC = () => {
+  // This fetches the list of category types from the server.
   const { data: categoryTypes, isLoading: isLoadingTypes, error: typesError } = useCategoryTypes();
+  // This is a function that lets us create a new category type on the server.
   const createCategoryTypeMutation = useCreateCategoryType();
 
-  const [newTypeName, setNewTypeName] = useState(''); // State for the new category type name input
+  // This is where we store the name and description of the new category type that the user is creating.
+  const [newTypeName, setNewTypeName] = useState('');
   const [newTypeDescription, setNewTypeDescription] = useState('');
 
   /**
-   * Handles the submission of the form to add a new category type.
-   * Prevents default form submission, validates input, and calls the `createCategoryTypeMutation`.
-   * Clears input fields on successful submission.
+   * This function is called when you submit the form to add a new category type.
+   * It sends the new category type data to the server.
    * @param e - The form event.
    */
   const handleAddCategoryType = async (e: React.FormEvent) => {
+    // We prevent the form from being submitted in the default way.
     e.preventDefault();
+    // We make sure that the user has entered a name for the category type.
     if (!newTypeName.trim()) {
-      // Basic validation: prevent adding empty type names
-      // Consider adding more robust validation and user feedback
       alert("Category type name cannot be empty.");
       return;
     }
     try {
+      // We send the new category type data to the server.
       await createCategoryTypeMutation.mutateAsync({
         name: newTypeName,
         description: newTypeDescription || null,
       });
+      // If the creation is successful, we clear the input fields.
       setNewTypeName('');
       setNewTypeDescription('');
     } catch (err) {
-      // Error is handled by mutation's isError and error properties
+      // If there's an error, we log it to the console for debugging.
       console.error("Failed to create category type", err);
     }
   };
 
+  // This is what the page actually shows on the screen.
   return (
     <PageWrapper>
       <h1>Category Management</h1>
 
       <SectionTitle>Category Types</SectionTitle>
+      {/* This is the form for adding a new category type. */}
       <Form onSubmit={handleAddCategoryType}>
         <h3>Add New Category Type</h3>
+        {/* This is the input field for the new category type's name. */}
         <Input
           type="text"
           placeholder="Type Name (e.g., Expense Type, Income Source)"
@@ -160,15 +180,18 @@ const CategoryManagerPage: React.FC = () => {
           onChange={(e) => setNewTypeName(e.target.value)}
           required
         />
+        {/* This is the input field for the new category type's description. */}
         <Input
           type="text"
           placeholder="Optional Description"
           value={newTypeDescription}
           onChange={(e) => setNewTypeDescription(e.target.value)}
         />
-        <Button type="submit" disabled={createCategoryTypeMutation.isPending}> {/* Changed isLoading to isPending */}
+        {/* This is the button for submitting the form. */}
+        <Button type="submit" disabled={createCategoryTypeMutation.isPending}>
           {createCategoryTypeMutation.isPending ? 'Adding...' : 'Add Type'}
         </Button>
+        {/* If there's an error creating the category type, we show an error message. */}
         {createCategoryTypeMutation.isError && (
           <ErrorMessage>
             Failed to add type: {(createCategoryTypeMutation.error as Error)?.message || "An unknown error occurred."}
@@ -176,9 +199,12 @@ const CategoryManagerPage: React.FC = () => {
         )}
       </Form>
 
+      {/* If the category types are still loading, we show a loading message. */}
       {isLoadingTypes && <p>Loading category types...</p>}
+      {/* If there was an error fetching the category types, we show an error message. */}
       {typesError && <ErrorMessage>Error loading types: {(typesError as Error)?.message || "Could not fetch category types."}</ErrorMessage>}
       
+      {/* Once the category types have been loaded, we show them in a list. */}
       {!isLoadingTypes && !typesError && categoryTypes && categoryTypes.length > 0 && (
         <List>
           {categoryTypes.map((type) => (
@@ -187,11 +213,12 @@ const CategoryManagerPage: React.FC = () => {
                 <strong>{type.name}</strong>
                 {type.description && <em style={{ marginLeft: '0.5rem', fontSize: '0.9em', color: '#bbb' }}>({type.description})</em>}
               </div>
-              {/* TODO: Add buttons for Edit/Delete Type and a link/button to manage categories for this type (e.g., navigate to /categories/:typeId or expand inline) */}
+              {/* In the future, we'll add buttons here to edit or delete the category type. */}
             </ListItem>
           ))}
         </List>
       )}
+      {/* If there are no category types, we show a message telling the user to add one. */}
       {!isLoadingTypes && !typesError && (!categoryTypes || categoryTypes.length === 0) && (
         <p>No category types defined yet. Add one using the form above.</p>
       )}

@@ -27,13 +27,12 @@ from sqlmodel import Field, SQLModel, Relationship
 ###############################################################################
 # Association table (many-to-many) between PaymentItem and Category
 ###############################################################################
+# This is a "link table" that connects payment items and categories.
+# It's like a bridge that lets us say "this payment item belongs to this category".
 class PaymentItemCategoryLink(SQLModel, table=True):
     """
-    Pure link table.
-
-    We *could* store extra metadata here (e.g. confidence score if tags were
-    auto-inferred by an ML model), but for now the composite primary key is
-    sufficient.
+    This is a special table that just connects two other tables together.
+    In this case, it connects the "paymentitem" table and the "category" table.
     """
     payment_item_id: Optional[int] = Field(
         default=None, foreign_key="paymentitem.id", primary_key=True
@@ -46,43 +45,38 @@ class PaymentItemCategoryLink(SQLModel, table=True):
 ###############################################################################
 # Taxonomy
 ###############################################################################
+# This defines the structure of a "CategoryType" object in our database.
 class CategoryType(SQLModel, table=True):
     """
-    A user-defined classification dimension.
-
-    Examples of types:
-        • *Spending Area*   (Food, Rent, …)
-        • *Payment Method*  (Cash, Credit Card, …)
-        • *VAT Rate*        (19%, 7%, 0%)
+    A category type is a way to group your categories, like "Expense Type" or "Income Source".
     """
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    description: Optional[str] = None
+    id: Optional[int] = Field(default=None, primary_key=True) # A unique number to identify the category type.
+    name: str # The name of the category type.
+    description: Optional[str] = None # A description of the category type (this is optional).
 
 
+# This defines the structure of a "Category" object in our database.
 class Category(SQLModel, table=True):
     """
-    A single tag within a `CategoryType` taxonomy tree.
-
-    The self-referencing `parent_id` allows arbitrary depth without cycles
-    (SQLModel enforces this by pointing `sa_relationship_kwargs["remote_side"]`
-    back to the same column).
+    A category is a way to group your payments, like "Groceries" or "Salary".
     """
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
+    id: Optional[int] = Field(default=None, primary_key=True) # A unique number to identify the category.
+    name: str # The name of the category.
 
-    # Which dimension does this tag belong to?
+    # This tells us which category type this category belongs to.
     type_id: int = Field(foreign_key="categorytype.id")
 
-    # Recursive parent pointer (nullable for root nodes)
+    # This lets us create sub-categories. For example, "Groceries" could be a parent category,
+    # and "Fruit" and "Vegetables" could be its children.
     parent_id: Optional[int] = Field(default=None, foreign_key="category.id")
 
-    # Optional filename of an icon associated with this category
+    # This is the name of the file for the category's icon.
     icon_file: Optional[str] = None
 
 
+# This defines the structure of the data that we expect when we update a category.
 class CategoryUpdate(SQLModel):
-    """Schema for updating an existing category."""
+    """This is the data we need to update a category."""
     name: Optional[str] = None
     type_id: Optional[int] = None
     parent_id: Optional[int] = None
@@ -93,62 +87,55 @@ class CategoryUpdate(SQLModel):
 ###############################################################################
 # Core business entities
 ###############################################################################
+# This defines the structure of a "Recipient" object in our database.
 class Recipient(SQLModel, table=True):
     """
-    Person or organisation involved in a transaction.
-
-    Keeping this in a separate table lets us:
-    • De-duplicate recipient data across many payment items
-    • Attach future metadata (e.g. contact info, logo, IBAN)
+    A recipient is a person or company that you pay money to or receive money from.
     """
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    address: Optional[str] = None
+    id: Optional[int] = Field(default=None, primary_key=True) # A unique number to identify the recipient.
+    name: str # The name of the recipient.
+    address: Optional[str] = None # The address of the recipient (this is optional).
 
 
+# This is the base model for a payment item. It contains all the fields that are common to all payment items.
 class PaymentItemBase(SQLModel):
     """
-    Base model for a payment item, containing all common fields.
-
-    Conventions
-    -----------
-    • Negative `amount`  → Expense  (money out)
-    • Positive `amount`  → Income   (money in)
-    • `date` uses ISO format for API consistency with frontend
-    • `periodic=True` marks template items that spawn future instances via
-      scheduled jobs (not yet implemented).
+    This is the basic building block for a payment item.
     """
-    amount: float  # Use DECIMAL in production to avoid rounding errors
-    date: datetime  # Changed from timestamp to date for frontend compatibility
-    periodic: bool = False
-    description: Optional[str] = None  # Description of what this payment is for
+    amount: float  # The amount of the payment.
+    date: datetime  # The date of the payment.
+    periodic: bool = False # Whether the payment is periodic.
+    description: Optional[str] = None  # A description of the payment (this is optional).
 
-    # Optional attachments (local path or S3 URL – persisted by upload endpoints)
+    # In the future, we could add fields here for attachments like invoices or product images.
     invoice_path: Optional[str] = None
     product_image_path: Optional[str] = None
+    # This is the ID of the recipient of the payment.
     recipient_id: Optional[int] = Field(default=None, foreign_key="recipient.id")
 
+# This is the actual database model for a payment item. It inherits all the fields from PaymentItemBase.
 class PaymentItem(PaymentItemBase, table=True):
     """
-    Database model for a payment item. Inherits from Base and adds DB-specific fields.
+    This is the full database model for a payment item.
     """
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True) # A unique number to identify the payment item.
 
 # ==============================================================================
 # API Models (Pydantic Schemas) for PaymentItem
 # ==============================================================================
 
+# This defines the structure of the data that we expect when we create a new payment item.
 class PaymentItemCreate(PaymentItemBase):
     """
-    Schema for creating a new payment item via the API.
-    Accepts a list of category IDs instead of full Category objects.
+    This is the data we need to create a new payment item.
     """
-    category_ids: Optional[List[int]] = []
+    category_ids: Optional[List[int]] = [] # A list of the IDs of the categories that this payment belongs to.
 
+# This defines the structure of the data that we expect when we update a payment item.
 class PaymentItemUpdate(PaymentItemBase):
     """
-    Schema for updating an existing payment item via the API.
-    All fields are optional for partial updates.
+    This is the data we need to update a payment item.
+    All the fields are optional, so you can update just one field at a time if you want.
     """
     amount: Optional[float] = None
     date: Optional[datetime] = None
@@ -159,11 +146,11 @@ class PaymentItemUpdate(PaymentItemBase):
     recipient_id: Optional[int] = None
     category_ids: Optional[List[int]] = None
 
+# This defines the structure of the data that we send back to the user when they ask for a payment item.
 class PaymentItemRead(PaymentItemBase):
     """
-
-    Schema for reading/returning a payment item from the API.
-    Includes the full Recipient and Category objects for detailed views.
+    This is the data we send back to the user when they ask for a payment item.
+    It includes the full recipient and category objects, so the user has all the information they need.
     """
     id: int
     recipient: Optional[Recipient] = None

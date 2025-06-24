@@ -8,8 +8,11 @@
  * declarative.
  */
 
+// This section brings in the tools we need to communicate with our app's server.
 import axios from 'axios';
+// These are special functions from React Query that help us fetch and manage data from the server.
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+// This imports the data structures we use for our app's data.
 import { PaymentItem, Recipient, Category, CategoryType } from '../types';
 
 /* -------------------------------------------------------------------------- */
@@ -17,20 +20,21 @@ import { PaymentItem, Recipient, Category, CategoryType } from '../types';
 /* -------------------------------------------------------------------------- */
 
 /**
- * Axios instance with sensible defaults:
- *   – Base URL `/api` so Vite proxy forwards to FastAPI (:8000)
- *   – 10 s timeout to avoid hanging UI
+ * This is a special version of "axios" (a tool for making web requests) that we've configured for our app.
+ * It knows that our server is located at "/api" and will give up if a request takes longer than 10 seconds.
  */
 const api = axios.create({
-  baseURL: '/api',
-  timeout: 10_000,
+  baseURL: '/api', // This tells axios that all our server requests should start with "/api".
+  timeout: 10_000, // This sets a 10-second timeout for all requests.
 });
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** Build query-string from optional filters. */
+/** This function builds a query string for our payment items API endpoint.
+ * A query string is the part of a URL that comes after the "?", and it's used to filter the results.
+ */
 function buildPaymentQuery(params: {
   expense_only?: boolean;
   income_only?: boolean;
@@ -50,10 +54,9 @@ function buildPaymentQuery(params: {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Fetch all payment items, optionally filtered by type.
- *
- * The hook returns a React-Query result object:
- *   const { data, isLoading, error } = usePaymentItems({ expenseOnly: true })
+ * This is a special function (called a "hook") that fetches all the payment items from the server.
+ * You can also use it to filter the items by type (expenses or incomes).
+ * It returns an object with the data, loading state, and error state.
  */
 export function usePaymentItems(opts?: {
   expenseOnly?: boolean;
@@ -61,13 +64,16 @@ export function usePaymentItems(opts?: {
   categoryIds?: number[];
 }) {
   const { expenseOnly = false, incomeOnly = false, categoryIds = [] } = opts ?? {};
-  // Sort categoryIds to ensure queryKey is consistent regardless of order
+  // We sort the category IDs to make sure that the query key is always the same,
+  // no matter what order the IDs are in.
   const sortedCategoryIds = [...categoryIds].sort((a, b) => a - b);
   const queryKey = ['payment-items', expenseOnly, incomeOnly, sortedCategoryIds.join(',')];
 
+  // This is where we actually use React Query to fetch the data.
   return useQuery<PaymentItem[], Error>({
-    queryKey,
+    queryKey, // This is a unique key for this query, so React Query knows how to cache the data.
     queryFn: async () => {
+      // This is the function that actually fetches the data from the server.
       const qs = buildPaymentQuery({
         expense_only: expenseOnly,
         income_only: incomeOnly,
@@ -76,46 +82,41 @@ export function usePaymentItems(opts?: {
       const res = await api.get<PaymentItem[]>(`/payment-items${qs}`);
       return res.data;
     },
-    placeholderData: (previousData) => previousData, // Updated for TanStack Query v5
+    placeholderData: (previousData) => previousData, // This tells React Query to keep showing the old data while the new data is loading.
   });
 }
 
 /**
- * Fetch a single payment item by its ID.
- * @param itemId - The ID of the payment item to fetch. Query is disabled if undefined.
- * @returns React-Query result object for the payment item.
+ * This hook fetches a single payment item from the server, by its ID.
+ * @param itemId - The ID of the payment item to fetch.
+ * @returns An object with the data, loading state, and error state.
  */
 export function usePaymentItem(itemId: number | undefined) {
   return useQuery<PaymentItem, Error>({
     queryKey: ['payment-item', itemId],
     queryFn: async () => {
       if (itemId === undefined) {
-        // This case should ideally be handled by disabling the query
-        // or by the component logic not calling the hook with undefined.
-        // Throwing an error or returning null/undefined depends on desired behavior.
         throw new Error('Item ID is undefined');
       }
       const res = await api.get<PaymentItem>(`/payment-items/${itemId}`);
       return res.data;
     },
-    enabled: itemId !== undefined, // Only run query if itemId is defined
+    enabled: itemId !== undefined, // This tells React Query to only run the query if the item ID is defined.
   });
 }
 
 /**
- * Provides a mutation hook for creating a new payment item.
- * Invalidates 'payment-items' query on success.
- * @returns React-Query mutation object.
+ * This hook provides a function for creating a new payment item on the server.
+ * @returns A mutation object that you can use to create a new payment item.
  */
 export function useCreatePaymentItem() {
   const queryClient = useQueryClient();
-  // The API now expects a `PaymentItemCreate` schema, which includes `category_ids`.
-  // The mutation variable type is generic to accept the form data.
   return useMutation<PaymentItem, Error, { [key: string]: any; category_ids?: number[] }>({
     mutationFn: async (newItem) => {
       const res = await api.post<PaymentItem>('/payment-items', newItem);
       return res.data;
     },
+    // When the mutation is successful, we tell React Query to refetch the list of payment items.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-items'] });
     },
@@ -123,14 +124,11 @@ export function useCreatePaymentItem() {
 }
 
 /**
- * Provides a mutation hook for updating an existing payment item.
- * Invalidates 'payment-items' and specific 'payment-item' queries on success.
- * @returns React-Query mutation object.
+ * This hook provides a function for updating an existing payment item on the server.
+ * @returns A mutation object that you can use to update a payment item.
  */
 export function useUpdatePaymentItem() {
   const queryClient = useQueryClient();
-  // The API now expects a `PaymentItemUpdate` schema.
-  // The mutation variable type is generic to accept the form data.
   return useMutation<PaymentItem, Error, { id: number; [key: string]: any; category_ids?: number[] }>({
     mutationFn: async (itemToUpdate) => {
       const { id, ...updateData } = itemToUpdate;
@@ -140,6 +138,7 @@ export function useUpdatePaymentItem() {
       );
       return res.data;
     },
+    // When the mutation is successful, we tell React Query to refetch the list of payment items and the specific payment item that was updated.
     onSuccess: (data: PaymentItem) => {
       queryClient.invalidateQueries({ queryKey: ['payment-items'] });
       queryClient.invalidateQueries({ queryKey: ['payment-item', data.id] });
@@ -148,9 +147,8 @@ export function useUpdatePaymentItem() {
 }
 
 /**
- * Provides a mutation hook for deleting a payment item by its ID.
- * Invalidates 'payment-items' query and removes specific 'payment-item' query on success.
- * @returns React-Query mutation object.
+ * This hook provides a function for deleting a payment item from the server.
+ * @returns A mutation object that you can use to delete a payment item.
  */
 export function useDeletePaymentItem() {
   const queryClient = useQueryClient();
@@ -158,6 +156,7 @@ export function useDeletePaymentItem() {
     mutationFn: async (itemId: number) => {
       await api.delete(`/payment-items/${itemId}`);
     },
+    // When the mutation is successful, we tell React Query to refetch the list of payment items and remove the deleted item from the cache.
     onSuccess: (_: void, itemId: number) => {
       queryClient.invalidateQueries({ queryKey: ['payment-items'] });
       queryClient.removeQueries({ queryKey: ['payment-item', itemId] });
@@ -170,8 +169,8 @@ export function useDeletePaymentItem() {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Fetch all category types.
- * @returns React-Query result object for the list of category types.
+ * This hook fetches all the category types from the server.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useCategoryTypes() {
   return useQuery<CategoryType[], Error>({
@@ -184,9 +183,8 @@ export function useCategoryTypes() {
 }
 
 /**
- * Provides a mutation hook for creating a new category type.
- * Invalidates 'category-types' query on success.
- * @returns React-Query mutation object.
+ * This hook provides a function for creating a new category type on the server.
+ * @returns A mutation object that you can use to create a new category type.
  */
 export function useCreateCategoryType() {
   const queryClient = useQueryClient();
@@ -195,6 +193,7 @@ export function useCreateCategoryType() {
       const res = await api.post<CategoryType>('/category-types', newType);
       return res.data;
     },
+    // When the mutation is successful, we tell React Query to refetch the list of category types.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['category-types'] });
     },
@@ -206,9 +205,9 @@ export function useCreateCategoryType() {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Fetch all categories for a specific type ID.
- * @param typeId - The ID of the category type. Query is disabled if undefined.
- * @returns React-Query result object for the list of categories.
+ * This hook fetches all the categories for a specific type from the server.
+ * @param typeId - The ID of the category type to fetch.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useCategoriesByType(typeId: number | undefined) {
   return useQuery<Category[], Error>({
@@ -218,13 +217,13 @@ export function useCategoriesByType(typeId: number | undefined) {
       const res = await api.get<Category[]>(`/categories/by-type/${typeId}`);
       return res.data;
     },
-    enabled: typeId !== undefined,
+    enabled: typeId !== undefined, // This tells React Query to only run the query if the type ID is defined.
   });
 }
 
 /**
- * Fetch all categories regardless of their type.
- * @returns React-Query result object for the list of all categories.
+ * This hook fetches all the categories from the server, regardless of their type.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useAllCategories() {
   return useQuery<Category[], Error>({
@@ -237,9 +236,9 @@ export function useAllCategories() {
 }
 
 /**
- * Fetch a category and its full children tree by its ID.
- * @param categoryId - The ID of the category. Query is disabled if undefined.
- * @returns React-Query result object for the category tree.
+ * This hook fetches a category and all its children from the server.
+ * @param categoryId - The ID of the category to fetch.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useCategoryTree(categoryId: number | undefined) {
   return useQuery<Category, Error>({
@@ -249,11 +248,13 @@ export function useCategoryTree(categoryId: number | undefined) {
       const res = await api.get<Category>(`/categories/${categoryId}/tree`);
       return res.data;
     },
-    enabled: categoryId !== undefined,
+    enabled: categoryId !== undefined, // This tells React Query to only run the query if the category ID is defined.
   });
 }
 /**
- * Fetch all descendants of a category by its ID.
+ * This hook fetches all the descendants of a category from the server.
+ * @param categoryId - The ID of the category to fetch the descendants of.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useCategoryDescendants(categoryId: number | undefined) {
   return useQuery<Category[], Error>({
@@ -263,15 +264,14 @@ export function useCategoryDescendants(categoryId: number | undefined) {
       const res = await api.get<Category[]>(`/categories/${categoryId}/descendants`);
       return res.data;
     },
-    enabled: categoryId !== undefined,
+    enabled: categoryId !== undefined, // This tells React Query to only run the query if the category ID is defined.
   });
 }
 
 
 /**
- * Provides a mutation hook for creating a new category.
- * Invalidates relevant 'categories-by-type' and 'category-tree' queries on success.
- * @returns React-Query mutation object.
+ * This hook provides a function for creating a new category on the server.
+ * @returns A mutation object that you can use to create a new category.
  */
 export function useCreateCategory() {
   const queryClient = useQueryClient();
@@ -280,21 +280,22 @@ export function useCreateCategory() {
       const res = await api.post<Category>('/categories', newCategory);
       return res.data;
     },
+    // When the mutation is successful, we tell React Query to refetch the list of categories for the new category's type,
+    // as well as the tree for the new category's parent (if it has one).
     onSuccess: (data: Category) => {
       queryClient.invalidateQueries({ queryKey: ['categories-by-type', data.type_id] });
-      // If a parent exists, its tree view might change
       if (data.parent_id) {
         queryClient.invalidateQueries({ queryKey: ['category-tree', data.parent_id] });
       }
-      // Invalidate general category listings if any exist
       queryClient.invalidateQueries({ queryKey: ['all-categories'] });
     },
   });
 }
 
 /**
- * Provides a mutation hook for updating an existing category.
- * Invalidates relevant queries on success.
+ * This hook provides a function for updating an existing category on the server.
+ * @param categoryId - The ID of the category to update.
+ * @returns A mutation object that you can use to update a category.
  */
 export function useUpdateCategory(categoryId: number) {
   const queryClient = useQueryClient();
@@ -303,6 +304,8 @@ export function useUpdateCategory(categoryId: number) {
       const res = await api.put<Category>(`/categories/${categoryId}`, updated);
       return res.data;
     },
+    // When the mutation is successful, we tell React Query to refetch the list of categories for the updated category's type,
+    // as well as the tree for the updated category.
     onSuccess: (data: Category) => {
       queryClient.invalidateQueries({ queryKey: ['categories-by-type', data.type_id] });
       queryClient.invalidateQueries({ queryKey: ['category-tree', data.id] });
@@ -311,6 +314,7 @@ export function useUpdateCategory(categoryId: number) {
   });
 }
 
+// This function uploads a category icon to the server.
 export async function uploadCategoryIcon(file: File): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
@@ -331,8 +335,8 @@ export async function uploadCategoryIcon(file: File): Promise<string> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Fetch all recipients.
- * @returns React-Query result object for the list of recipients.
+ * This hook fetches all the recipients from the server.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useRecipients() {
   return useQuery<Recipient[], Error>({
@@ -345,9 +349,8 @@ export function useRecipients() {
 }
 
 /**
- * Provides a mutation hook for creating a new recipient.
- * Invalidates 'recipients' query on success.
- * @returns React-Query mutation object.
+ * This hook provides a function for creating a new recipient on the server.
+ * @returns A mutation object that you can use to create a new recipient.
  */
 export function useCreateRecipient() {
   const queryClient = useQueryClient();
@@ -356,6 +359,7 @@ export function useCreateRecipient() {
       const res = await api.post<Recipient>('/recipients', newRecipient);
       return res.data;
     },
+    // When the mutation is successful, we tell React Query to refetch the list of recipients.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipients'] });
     },
@@ -363,8 +367,9 @@ export function useCreateRecipient() {
 }
 
 /**
- * Fetch a single recipient by ID.
- * @param recipientId - ID of the recipient to fetch.
+ * This hook fetches a single recipient from the server, by their ID.
+ * @param recipientId - The ID of the recipient to fetch.
+ * @returns An object with the data, loading state, and error state.
  */
 export function useRecipient(recipientId: number | undefined) {
   return useQuery<Recipient, Error>({
@@ -374,6 +379,6 @@ export function useRecipient(recipientId: number | undefined) {
       const res = await api.get<Recipient>(`/recipients/${recipientId}`);
       return res.data;
     },
-    enabled: recipientId !== undefined,
+    enabled: recipientId !== undefined, // This tells React Query to only run the query if the recipient ID is defined.
   });
 }

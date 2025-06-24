@@ -16,14 +16,21 @@ Endpoint overview
 /recipients               CRUD for involved persons or organisations
 """
 
+# This section brings in all the tools we need to build our app's server.
 from typing import List, Optional
 
+# FastAPI is the main tool we use to build our server.
 from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File
+# This is for sending files back to the user.
 from fastapi.responses import FileResponse
+# This is for working with file paths.
 from pathlib import Path
+# This is for copying files.
 import shutil
+# This is for working with our database.
 from sqlmodel import Session, select
 
+# This imports the functions and data structures we need from other parts of our app.
 from app.database import create_db_and_tables, get_session
 from app.models import (
     PaymentItem,
@@ -34,34 +41,36 @@ from app.models import (
     Category,
     CategoryUpdate,
     Recipient,
-    PaymentItemCategoryLink, # Import for joining
+    PaymentItemCategoryLink,
 )
 
+# This creates our main FastAPI app.
 app = FastAPI(title="FinanceBook API", version="0.1.0")
 
-# Directory where uploaded category icon files are stored
+# This is the directory where we'll store the icons for our categories.
 ICON_DIR = Path("icons")
 ICON_DIR.mkdir(exist_ok=True)
 
 
+# This function runs when our app starts up.
 @app.on_event("startup")
 def on_startup() -> None:
-    """Create tables on first run and initialize default data."""
+    """This function creates the database tables and adds some default data when the app starts."""
     create_db_and_tables()
     initialize_default_data()
 
 
 def initialize_default_data() -> None:
-    """Initialize default data like the 'standard' category type."""
+    """This function adds some default data to our database, like the "standard" category type and the "UNCLASSIFIED" category."""
     from app.database import engine
     with Session(engine) as session:
-        # Check if 'standard' category type already exists
+        # We check if the "standard" category type already exists.
         standard_type = session.exec(
             select(CategoryType).where(CategoryType.name == "standard")
         ).first()
         
+        # If it doesn't exist, we create it.
         if not standard_type:
-            # Create the default 'standard' category type
             standard_type = CategoryType(
                 name="standard",
                 description="Default category type for basic expense/income classification"
@@ -70,10 +79,11 @@ def initialize_default_data() -> None:
             session.commit()
             session.refresh(standard_type)
 
-        # Create default 'UNCLASSIFIED' category if it doesn't exist
+        # We also check if the "UNCLASSIFIED" category already exists.
         unclassified = session.exec(
             select(Category).where(Category.name == "UNCLASSIFIED")
         ).first()
+        # If it doesn't exist, we create it.
         if not unclassified:
             unclassified = Category(
                 name="UNCLASSIFIED",
@@ -88,21 +98,21 @@ def initialize_default_data() -> None:
 # ---------------------------------------------------------------------------
 # Payment Item Endpoints
 # ---------------------------------------------------------------------------
+# This function creates a new payment item in our database.
 @app.post("/payment-items", response_model=PaymentItemRead)
 def create_payment_item(
     item_create: PaymentItemCreate,
     session: Session = Depends(get_session),
 ) -> PaymentItem:
-    # 1. Validate recipient if provided
+    # First, we check if the recipient exists.
     if item_create.recipient_id:
         recipient = session.get(Recipient, item_create.recipient_id)
         if not recipient:
             raise HTTPException(status_code=404, detail=f"Recipient with id {item_create.recipient_id} not found")
 
-    # 2. Validate categories if provided
+    # Then, we check if the categories exist.
     category_ids = []
     if item_create.category_ids:
-
         seen_types = set()
         for cat_id in item_create.category_ids:
             category = session.get(Category, cat_id)
@@ -113,21 +123,21 @@ def create_payment_item(
             seen_types.add(category.type_id)
             category_ids.append(cat_id)
     else:
-        # Assign the default UNCLASSIFIED category
+        # If no categories are provided, we assign the "UNCLASSIFIED" category.
         default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
         if default_cat:
             category_ids.append(default_cat.id)
 
-    # 3. Create PaymentItem instance from the payload
+    # We create a new payment item with the provided data.
     item_data = item_create.dict(exclude={"category_ids"})
     db_item = PaymentItem(**item_data)
 
-    # 4. Add to session and commit
+    # We add the new payment item to the database.
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
     
-    # 5. Add category links if provided
+    # We link the payment item to its categories.
     if category_ids:
         for cat_id in category_ids:
             link = PaymentItemCategoryLink(payment_item_id=db_item.id, category_id=cat_id)
@@ -137,6 +147,7 @@ def create_payment_item(
     return db_item
 
 
+# This function gets a list of all the payment items from our database.
 @app.get("/payment-items", response_model=List[PaymentItemRead])
 def list_payment_items(
     expense_only: bool = False,
@@ -144,18 +155,22 @@ def list_payment_items(
     category_ids: Optional[List[int]] = Query(None, description="List of category IDs to filter by"),
     session: Session = Depends(get_session),
 ) -> List[PaymentItem]:
+    # We can't filter by both expenses and incomes at the same time.
     if expense_only and income_only:
         raise HTTPException(status_code=400, detail="Choose only one filter: expense_only or income_only")
 
+    # We start with a query that gets all the payment items.
     query = select(PaymentItem)
+    # If the user wants to see only expenses, we add a filter to the query.
     if expense_only:
         query = query.where(PaymentItem.amount < 0)
+    # If the user wants to see only incomes, we add a filter to the query.
     if income_only:
         query = query.where(PaymentItem.amount > 0)
 
+    # If the user wants to filter by categories, we add a filter to the query.
     if category_ids:
-        # Expand the category list with all descendants so filtering a parent
-        # category also returns items tagged with any of its children.
+        # We also include all the sub-categories of the selected categories.
         expanded_ids: set[int] = set(category_ids)
 
         def gather_descendants(root_id: int) -> None:
@@ -183,6 +198,7 @@ def list_payment_items(
     return session.exec(query).all()
 
 
+# This function gets a single payment item from our database, by its ID.
 @app.get("/payment-items/{item_id}", response_model=PaymentItemRead)
 def get_payment_item(item_id: int, session: Session = Depends(get_session)) -> PaymentItem:
     item = session.get(PaymentItem, item_id)
@@ -191,6 +207,7 @@ def get_payment_item(item_id: int, session: Session = Depends(get_session)) -> P
     return item
 
 
+# This function updates an existing payment item in our database.
 @app.put("/payment-items/{item_id}", response_model=PaymentItemRead)
 def update_payment_item(
     item_id: int,
@@ -201,24 +218,24 @@ def update_payment_item(
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    # 1. Update standard fields
+    # We update the payment item with the new data.
     update_data = item_update.dict(exclude_unset=True)
     for key, value in update_data.items():
-        if key != "category_ids": # Defer category update
+        if key != "category_ids":
             setattr(db_item, key, value)
 
-    # 2. Validate and update recipient if provided
+    # We check if the recipient exists.
     if item_update.recipient_id:
         recipient = session.get(Recipient, item_update.recipient_id)
         if not recipient:
             raise HTTPException(status_code=404, detail=f"Recipient with id {item_update.recipient_id} not found")
         db_item.recipient_id = item_update.recipient_id
 
-    # 3. Validate and update categories if provided
+    # We check if the categories exist.
     if item_update.category_ids is not None:
         categories = []
         seen_types = set()
-        if item_update.category_ids:  # If list is not empty
+        if item_update.category_ids:
             for cat_id in item_update.category_ids:
                 category = session.get(Category, cat_id)
                 if not category:
@@ -228,18 +245,20 @@ def update_payment_item(
                 seen_types.add(category.type_id)
                 categories.append(category)
         else:
+            # If no categories are provided, we assign the "UNCLASSIFIED" category.
             default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
             if default_cat:
                 categories.append(default_cat)
-        db_item.categories = categories  # Replace existing categories
+        db_item.categories = categories
 
-    # 4. Commit and refresh
+    # We save the changes to the database.
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
     return db_item
 
 
+# This function deletes a payment item from our database.
 @app.delete("/payment-items/{item_id}", status_code=204)
 def delete_payment_item(item_id: int, session: Session = Depends(get_session)) -> None:
     item = session.get(PaymentItem, item_id)
@@ -252,6 +271,7 @@ def delete_payment_item(item_id: int, session: Session = Depends(get_session)) -
 # ---------------------------------------------------------------------------
 # Category Type Endpoints
 # ---------------------------------------------------------------------------
+# This function creates a new category type in our database.
 @app.post("/category-types", response_model=CategoryType)
 def create_category_type(
     ct: CategoryType, session: Session = Depends(get_session)
@@ -262,6 +282,7 @@ def create_category_type(
     return ct
 
 
+# This function gets a list of all the category types from our database.
 @app.get("/category-types", response_model=List[CategoryType])
 def list_category_types(session: Session = Depends(get_session)) -> List[CategoryType]:
     return session.exec(select(CategoryType)).all()
@@ -270,9 +291,10 @@ def list_category_types(session: Session = Depends(get_session)) -> List[Categor
 # ---------------------------------------------------------------------------
 # Category Endpoints
 # ---------------------------------------------------------------------------
+# This function creates a new category in our database.
 @app.post("/categories", response_model=Category)
 def create_category(category: Category, session: Session = Depends(get_session)) -> Category:
-    # Parent/type validation
+    # We check if the parent category and category type exist.
     if category.parent_id and not session.get(Category, category.parent_id):
         raise HTTPException(status_code=404, detail="Parent category not found")
     if not session.get(CategoryType, category.type_id):
@@ -284,6 +306,7 @@ def create_category(category: Category, session: Session = Depends(get_session))
     return category
 
 
+# This function updates an existing category in our database.
 @app.put("/categories/{category_id}", response_model=Category)
 def update_category(
     category_id: int,
@@ -296,6 +319,7 @@ def update_category(
 
     update_data = category_update.dict(exclude_unset=True)
 
+    # We check if the parent category and category type exist.
     if "parent_id" in update_data and update_data["parent_id"] is not None:
         if not session.get(Category, update_data["parent_id"]):
             raise HTTPException(status_code=404, detail="Parent category not found")
@@ -313,15 +337,16 @@ def update_category(
     return category
 
 
+# This function gets a category and all its children from our database.
 @app.get("/categories/{category_id}/tree", response_model=Category)
 def get_category_tree(category_id: int, session: Session = Depends(get_session)) -> Category:
     category = session.get(Category, category_id)
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
-    # children are lazy-loaded; FastAPI serialises recursively
     return category
 
 
+# This function gets all the descendants of a category from our database.
 @app.get("/categories/{category_id}/descendants", response_model=List[Category])
 def list_category_descendants(category_id: int, session: Session = Depends(get_session)) -> List[Category]:
     root = session.get(Category, category_id)
@@ -336,23 +361,25 @@ def list_category_descendants(category_id: int, session: Session = Depends(get_s
             descendants.append(child)
             queue.append(child.id)
     return descendants
+# This function gets a list of all the categories for a specific type from our database.
 @app.get("/categories/by-type/{type_id}", response_model=List[Category])
-
 def list_categories_by_type(
     type_id: int, session: Session = Depends(get_session)
 ) -> List[Category]:
     return session.exec(select(Category).where(Category.type_id == type_id)).all()
 
 
+# This function gets a list of all the categories from our database, regardless of their type.
 @app.get("/categories", response_model=List[Category])
 def list_all_categories(session: Session = Depends(get_session)) -> List[Category]:
-    """Get all categories regardless of their type."""
+    """This function gets all the categories from our database, regardless of their type."""
     return session.exec(select(Category)).all()
 
 
 # ---------------------------------------------------------------------------
 # Recipient Endpoints
 # ---------------------------------------------------------------------------
+# This function creates a new recipient in our database.
 @app.post("/recipients", response_model=Recipient)
 def create_recipient(recipient: Recipient, session: Session = Depends(get_session)) -> Recipient:
     session.add(recipient)
@@ -361,16 +388,18 @@ def create_recipient(recipient: Recipient, session: Session = Depends(get_sessio
     return recipient
 
 
+# This function gets a list of all the recipients from our database.
 @app.get("/recipients", response_model=List[Recipient])
 def list_recipients(session: Session = Depends(get_session)) -> List[Recipient]:
     return session.exec(select(Recipient)).all()
 
 
+# This function gets a single recipient from our database, by their ID.
 @app.get("/recipients/{recipient_id}", response_model=Recipient)
 def get_recipient(
     recipient_id: int, session: Session = Depends(get_session)
 ) -> Recipient:
-    """Fetch a single recipient by its ID."""
+    """This function gets a single recipient from our database, by their ID."""
     recipient = session.get(Recipient, recipient_id)
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
@@ -380,18 +409,20 @@ def get_recipient(
 # ---------------------------------------------------------------------------
 # File Upload/Download Endpoints
 # ---------------------------------------------------------------------------
+# This function uploads an icon for a category.
 @app.post("/uploadicon/")
 def upload_icon(file: UploadFile = File(...)) -> dict:
-    """Save an uploaded icon file and return its filename."""
+    """This function saves an uploaded icon file and returns its filename."""
     file_path = ICON_DIR / file.filename
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
     return {"filename": file.filename}
 
 
+# This function downloads an icon for a category.
 @app.get("/download_static/{filename}")
 def download_icon(filename: str) -> FileResponse:
-    """Serve an uploaded icon file."""
+    """This function serves an uploaded icon file."""
     file_path = ICON_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
