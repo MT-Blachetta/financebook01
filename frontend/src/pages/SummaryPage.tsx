@@ -5,326 +5,412 @@
  *
  * State Flow
  * ----------
- *  NavigationBar (presentational) ⟷ SummaryPage (filter + data fetching)
- *      ↓ items
- *  PaymentList (presentational)
+ * NavigationBar (presentational) ⟷ SummaryPage (filter + data fetching)
+ * ↓ items
+ * PaymentList (presentational)
  */
 
+// This section brings in the tools we need to build this page.
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
+// These are helpers from React Router that let us work with the URL.
 import { useSearchParams, useNavigate } from 'react-router-dom';
+// This is a tool that lets us create and style our own components.
 import styled from 'styled-components';
+// This is a helper for formatting dates.
 import { format, parseISO } from 'date-fns';
 
+// Import the SVG icons from the assets folder.
+import UpIcon from '../assets/up.svg';
+import DownIcon from '../assets/down.svg';
+
+// This imports the type for our view filter.
 import { ViewFilter } from '../components/NavigationBar';
+// This imports the functions that let us fetch data from our app's server.
 import { usePaymentItems, useAllCategories, useCategoryTypes, useRecipient } from '../api/hooks';
+// This imports the data structures we use for payment items and categories.
 import { PaymentItem, isExpense, Category } from '../types';
 
 /* -------------------------------------------------------------------------- */
 /* Styled Components                                                          */
 /* -------------------------------------------------------------------------- */
 
-const CategoryFilterWrapper = styled.div`
-  padding: 1rem;
-  margin-bottom: 1rem;
-  background: #2a2a2a;
-  border-radius: var(--radius-lg);
-  border: 1px solid #444;
+// This is the container for the sort icons.
+const SortIconsContainer = styled.div`
+  display: flex; // Arranges the icons in a row.
+  align-items: center; // Vertically centers the icons.
+  gap: 0.5rem; // Adds a small space between the icons.
+`;
 
-  h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-    color: #eaeaea;
+// This is a wrapper for each individual icon to handle hover effects.
+const IconWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem;
+  transition: background-color 0.2s ease-in-out;
+
+  img {
+    width: 25px; // Sets the width of the icon.
+    height: 26px; // Sets the height of the icon.
+    cursor: pointer; // Shows a hand cursor, indicating it's clickable.
+  }
+
+  // On hover, a background color is added to give feedback to the user.
+  &:hover {
+    background-color: #444;
   }
 `;
 
+// This is the container for our category filter section.
+const CategoryFilterWrapper = styled.div`
+  padding: 1rem; // This adds some space inside the container.
+  margin-bottom: 1rem; // This adds some space below the container.
+  background: #2a2a2a; // This sets the background color.
+  border-radius: var(--radius-lg); // This rounds the corners of the container.
+  border: 1px solid #444; // This adds a border around the container.
+
+  h3 {
+    margin: 0 0 1rem 0; // This adds some space below the title.
+    font-size: 1rem; // This sets the font size.
+    color: #eaeaea; // This sets the text color.
+  }
+`;
+
+// This is the container for the category dropdown and the "Add Category" button.
 const CategoryDropdownContainer = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  align-items: center;
+  display: flex; // This arranges the items in a row.
+  gap: 0.5rem; // This adds some space between the items.
+  margin-bottom: 1rem; // This adds some space below the container.
+  align-items: center; // This vertically aligns the items in the center.
 
   select {
-    flex: 1;
-    padding: 0.5rem;
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-    border-radius: var(--radius-md);
-    font-size: 0.9rem;
+    flex: 1; // This makes the dropdown take up as much space as possible.
+    padding: 0.5rem; // This adds some space inside the dropdown.
+    background-color: #333; // This sets the background color.
+    color: #eaeaea; // This sets the text color.
+    border: 1px solid #555; // This adds a border around the dropdown.
+    border-radius: var(--radius-md); // This rounds the corners of the dropdown.
+    font-size: 0.9rem; // This sets the font size.
 
+    // When you click on the dropdown, we highlight it with a green border.
     &:focus {
-      outline: none;
-      border-color: var(--color-positive);
+      outline: none; // This removes the default blue outline.
+      border-color: var(--color-positive); // This sets the border color to green.
     }
   }
 `;
 
+// This is the "Add Category" button.
 const AddCategoryButton = styled.button`
-  background: var(--color-positive);
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
-  font-size: 0.9rem;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background-color 0.2s ease;
+  background: var(--color-positive); // This sets the background color to green.
+  color: white; // This sets the text color to white.
+  border: none; // This removes the button border.
+  padding: 0.5rem 1rem; // This adds some space inside the button.
+  border-radius: var(--radius-md); // This rounds the corners of the button.
+  font-size: 0.9rem; // This sets the font size.
+  cursor: pointer; // This shows a hand cursor when you hover over the button.
+  white-space: nowrap; // This prevents the text from wrapping to the next line.
+  transition: background-color 0.2s ease; // This creates a smooth color change on hover.
 
+  // This makes the button a darker green when you hover over it.
   &:hover {
     background: #059669;
   }
 
+  // This styles the button when it's disabled.
   &:disabled {
-    background: #666;
-    cursor: not-allowed;
+    background: #666; // This sets a grey background color.
+    cursor: not-allowed; // This shows a "not allowed" cursor.
   }
 `;
 
+// This is the container for the selected category tags.
 const SelectedCategoriesContainer = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  min-height: 2rem;
-  align-items: flex-start;
+  display: flex; // This arranges the tags in a row.
+  flex-wrap: wrap; // This allows the tags to wrap to the next line if there's not enough space.
+  gap: 0.5rem; // This adds some space between the tags.
+  margin-bottom: 1rem; // This adds some space below the container.
+  min-height: 2rem; // This sets a minimum height for the container.
+  align-items: flex-start; // This aligns the tags to the top of the container.
 `;
 
+// This is a single category tag.
 const CategoryTag = styled.div`
-  background: #444;
-  color: #eaeaea;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-md);
-  font-size: 0.8rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  background: #444; // This sets the background color.
+  color: #eaeaea; // This sets the text color.
+  padding: 0.25rem 0.75rem; // This adds some space inside the tag.
+  border-radius: var(--radius-md); // This rounds the corners of the tag.
+  font-size: 0.8rem; // This sets the font size.
+  display: flex; // This arranges the items in a row.
+  align-items: center; // This vertically aligns the items in the center.
+  gap: 0.5rem; // This adds some space between the items.
 
   button {
-    background: none;
-    border: none;
-    color: #aaa;
-    cursor: pointer;
-    padding: 0;
-    font-size: 1rem;
-    line-height: 1;
+    background: none; // This makes the button background transparent.
+    border: none; // This removes the button border.
+    color: #aaa; // This sets the text color.
+    cursor: pointer; // This shows a hand cursor when you hover over the button.
+    padding: 0; // This removes the default padding.
+    font-size: 1rem; // This sets the font size.
+    line-height: 1; // This sets the line height.
 
+    // This changes the color of the "x" when you hover over it.
     &:hover {
       color: #fff;
     }
   }
 `;
 
+// This is the "Reset All" button for the category filters.
 const ResetButton = styled.button`
-  background: #666;
-  color: white;
-  border: none;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-md);
-  font-size: 0.8rem;
-  cursor: pointer;
-  align-self: flex-end;
-  margin-left: auto;
+  background: #666; // This sets the background color.
+  color: white; // This sets the text color.
+  border: none; // This removes the button border.
+  padding: 0.25rem 0.5rem; // This adds some space inside the button.
+  border-radius: var(--radius-md); // This rounds the corners of the button.
+  font-size: 0.8rem; // This sets the font size.
+  cursor: pointer; // This shows a hand cursor when you hover over the button.
+  align-self: flex-end; // This aligns the button to the bottom of the container.
+  margin-left: auto; // This pushes the button to the right.
 
+  // This changes the background color when you hover over the button.
   &:hover {
     background: #777;
   }
 `;
 
+// This is the message we show when there are no category filters applied.
 const EmptyState = styled.div`
-  color: #888;
-  font-size: 0.8rem;
-  font-style: italic;
+  color: #888; // This sets the text color.
+  font-size: 0.8rem; // This sets the font size.
+  font-style: italic; // This makes the text italic.
 `;
 
+// This is the list that will contain our payment items.
 const List = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: var(--spacing-md) 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
+  list-style: none; // This removes the default bullet points.
+  padding: 0; // This removes the default padding.
+  margin: var(--spacing-md) 0; // This adds some space above and below the list.
+  display: flex; // This arranges the items in a flexible way.
+  flex-direction: column; // This stacks the items vertically.
+  gap: var(--spacing-sm); // This adds some space between the items.
 `;
 
+// This is a single payment item in our list.
 const Entry = styled.li`
-  background: #333; /* Grey background for the entry block */
-  border-radius: var(--radius-lg); /* Rounded edges */
-  padding: var(--spacing-md);
-  display: flex;
-  align-items: stretch; /* Align items to stretch to fill height */
-  gap: var(--spacing-md);
-  width: 100%; /* Block fills the width */
-  box-sizing: border-box;
+  background: #333; // This sets the background color.
+  border-radius: var(--radius-lg); // This rounds the corners of the item.
+  padding: var(--spacing-md); // This adds some space inside the item.
+  display: flex; // This arranges the content of the item in a flexible way.
+  align-items: stretch; // This makes the content of the item stretch to fill the height.
+  gap: var(--spacing-md); // This adds some space between the content items.
+  width: 100%; // This makes the item take up the full width of its container.
+  box-sizing: border-box; // This makes sure the padding and border are included in the total width.
 `;
 
+// This is the container for the payment item's image.
 const ImageHolder = styled.div`
-  flex: 0 0 25%; /* Thumbnail fills 25% of block width */
-  max-width: 120px; /* Added max-width to prevent overly large images on wide screens */
-  aspect-ratio: 1 / 1;
-  border-radius: var(--radius-md);
-  background-color: transparent; /* Surrounding background if no image */
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex: 0 0 25%; // This makes the image container take up 25% of the width of the item.
+  max-width: 120px; // This sets a maximum width for the image.
+  aspect-ratio: 1 / 1; // This makes the image container a square.
+  border-radius: var(--radius-md); // This rounds the corners of the image container.
+  background-color: transparent; // This makes the background of the image container transparent.
+  overflow: hidden; // This hides any part of the image that goes outside the container.
+  display: flex; // This arranges the content of the container in a flexible way.
+  align-items: center; // This vertically aligns the content in the center.
+  justify-content: center; // This horizontally aligns the content in the center.
 
   img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    width: 100%; // This makes the image take up the full width of the container.
+    height: 100%; // This makes the image take up the full height of the container.
+    object-fit: cover; // This makes sure the image covers the entire container without being distorted.
   }
 `;
 
-// Container for the main content to the right of the image
+// This is the container for the main content of the payment item, to the right of the image.
 const ContentWrapper = styled.div`
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between; /* Pushes amount to the bottom if date is on top */
+  flex: 1 1 auto; // This makes the container take up as much space as possible.
+  display: flex; // This arranges the content of the container in a flexible way.
+  flex-direction: column; // This stacks the content vertically.
+  justify-content: space-between; // This spreads out the content to fill the available space.
 `;
 
-// Container for Date and other meta info (if any)
+// This is the container for the date and other meta information.
 const MetaInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+  display: flex; // This arranges the items in a flexible way.
+  flex-direction: column; // This stacks the items vertically.
+  gap: var(--spacing-xs); // This adds some space between the items.
 `;
 
+// This is the text for the date.
 const DateText = styled.span`
-  font-size: 0.9rem; /* Slightly larger as per "headline" feel */
-  color: var(--color-text-secondary);
-  margin-bottom: var(--spacing-sm); /* Space below date */
-  display: block; /* Make it a block to take full width above amount in its column */
+  font-size: 0.9rem; // This sets the font size.
+  color: var(--color-text-secondary); // This sets the text color.
+  margin-bottom: var(--spacing-sm); // This adds some space below the date.
+  display: block; // This makes the date take up its own line.
 `;
 
+// This is the container for the recipient information.
 const RecipientInfo = styled.div`
-  font-size: 0.8rem;
-  color: #bbb;
-  margin-bottom: var(--spacing-xs);
+  font-size: 0.8rem; // This sets the font size.
+  color: #bbb; // This sets the text color.
+  margin-bottom: var(--spacing-xs); // This adds some space below the container.
   
   .name {
-    font-weight: 500;
-    color: #ddd;
+    font-weight: 500; // This makes the font bold.
+    color: #ddd; // This sets the text color.
   }
   
   .address {
-    font-size: 0.75rem;
-    color: #999;
-    margin-top: 2px;
+    font-size: 0.75rem; // This sets the font size.
+    color: #999; // This sets the text color.
+    margin-top: 2px; // This adds some space above the address.
   }
 `;
 
+// This is the container for the category chips.
 const CategoriesInfo = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-top: var(--spacing-xs);
+  display: flex; // This arranges the chips in a row.
+  flex-wrap: wrap; // This allows the chips to wrap to the next line if there's not enough space.
+  gap: 0.25rem; // This adds some space between the chips.
+  margin-top: var(--spacing-xs); // This adds some space above the container.
 `;
 
+// This is a single category chip.
 const CategoryChip = styled.span`
-  background: #555;
-  color: #ccc;
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
-  font-weight: 500;
+  background: #555; // This sets the background color.
+  color: #ccc; // This sets the text color.
+  padding: 0.125rem 0.5rem; // This adds some space inside the chip.
+  border-radius: var(--radius-sm); // This rounds the corners of the chip.
+  font-size: 0.7rem; // This sets the font size.
+  font-weight: 500; // This makes the font bold.
 `;
 
-// Container for the Amount, allowing it to be on the right edge of its parent
+// This is the container for the amount, which pushes it to the right side of the item.
 const AmountContainer = styled.div`
-  margin-left: auto; /* Pushes this container to the right */
-  text-align: right; /* Aligns text to the right within this container */
+  margin-left: auto; // This pushes the container to the right.
+  text-align: right; // This aligns the text to the right.
 `;
 
-const AmountText = styled.span<{ negative: boolean }>`
-  font-size: 1.5rem; /* "Biggest text information" */
-  font-weight: bold;
-  color: ${({ negative }) =>
-    negative ? 'var(--color-negative)' : 'var(--color-positive)'};
-  display: block; /* Ensure it takes its own line if needed */
+// This is the text for the amount.
+const AmountText = styled.span<{ $negative: boolean }>`
+  font-size: 1.5rem; // This sets the font size.
+  font-weight: bold; // This makes the font bold.
+  // This sets the text color to red for expenses and green for incomes.
+  color: ${({ $negative }) =>
+    $negative ? 'var(--color-negative)' : 'var(--color-positive)'};
+  display: block; // This makes the amount take up its own line.
 `;
 
-// For the "Total" row, to distinguish it
+// This is the container for the "Total" row at the bottom of the list.
 const TotalEntry = styled(Entry)`
-  background: #444; // Slightly different background for total
-  margin-top: var(--spacing-md);
-  border-top: 1px solid #555;
-  font-weight: bold;
+  background: #444; // This sets a different background color for the total row.
+  margin-top: var(--spacing-md); // This adds some space above the total row.
+  border-top: 1px solid #555; // This adds a line above the total row.
+  font-weight: bold; // This makes the font bold.
 `;
 
+// This is the label for the total row, "SUM".
 const TotalLabel = styled.div`
-    flex: 1 1 auto;
-    font-size: 1.2rem;
+    flex: 1 1 auto; // This makes the label take up as much space as possible.
+    font-size: 1.2rem; // This sets the font size.
 `;
 
 /* -------------------------------------------------------------------------- */
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * SortIcons component renders the up and down arrows for sorting.
+ * - 'up.svg' is for descending order.
+ * - 'down.svg' is for ascending order.
+ */
+const SortIcons: React.FC = () => (
+    <SortIconsContainer>
+      <IconWrapper>
+        <img id="sort-desc-icon" src={UpIcon} alt="Sort descending by date" />
+      </IconWrapper>
+      <IconWrapper>
+        <img id="sort-asc-icon" src={DownIcon} alt="Sort ascending by date" />
+      </IconWrapper>
+    </SortIconsContainer>
+);
+
+
+// This is the main component for our summary page.
 const SummaryPage: React.FC = () => {
+  // These are helpers from React Router that let us work with the URL.
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   
-  // View Filter (all, expenses, incomes) - always read from URL parameters
+  // This gets the current view filter ("all", "expenses", or "incomes") from the URL.
   const viewFilter = (searchParams.get('filter') as ViewFilter) || 'all';
 
-  // Category Filter
+  // This is where we store the state for our category filter.
   const initialCategoryIds = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>(initialCategoryIds);
   const [selectedDropdownCategory, setSelectedDropdownCategory] = useState<number | ''>('');
 
-  // Fetch all categories using the new hook
+  // This fetches all the categories and category types from the server.
   const { data: allCategories = [], isLoading: isLoadingCategories } = useAllCategories();
   const { data: categoryTypes = [] } = useCategoryTypes();
+  // This finds the ID of the "standard" category type.
   const standardTypeId = useMemo(() => categoryTypes.find(t => t.name === 'standard')?.id, [categoryTypes]);
 
-  // Sync selectedCategoryIds with URL parameters when they change
+  // This is a special function from React that runs whenever the URL changes.
+  // It makes sure that our selected category filters are in sync with the URL.
   useEffect(() => {
     const urlCategoryIds = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
     setSelectedCategoryIds(urlCategoryIds);
   }, [searchParams]);
 
-  // Update URL when category filters change (but not view filter - that's handled by App component)
+  // This is a special function from React that runs whenever the selected category filters change.
+  // It updates the URL to reflect the new filters.
   useEffect(() => {
     const newSearchParams = new URLSearchParams(searchParams);
     
-    // Remove existing category parameters
+    // We remove the old category filters from the URL.
     newSearchParams.delete('categories');
     
-    // Add current category filters
+    // We add the new category filters to the URL.
     selectedCategoryIds.forEach(id => newSearchParams.append('categories', id.toString()));
     
-    // Only update if there's actually a change
+    // We only update the URL if the filters have actually changed.
     const currentCategoryParams = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
     const hasChanged = currentCategoryParams.length !== selectedCategoryIds.length ||
-                      !currentCategoryParams.every(id => selectedCategoryIds.includes(id));
+                       !currentCategoryParams.every(id => selectedCategoryIds.includes(id));
     
     if (hasChanged) {
       setSearchParams(newSearchParams, { replace: true });
     }
   }, [selectedCategoryIds, setSearchParams]);
 
+  // This fetches the payment items from the server, based on the current filters.
   const queryResult = usePaymentItems({
     expenseOnly: viewFilter === 'expenses',
     incomeOnly: viewFilter === 'incomes',
     categoryIds: selectedCategoryIds,
   });
 
+  // We get the payment items, loading state, and error state from the query result.
   const queryData: PaymentItem[] | undefined = queryResult.data;
   const isLoading: boolean = queryResult.isLoading;
   const error: Error | null = queryResult.error;
 
-  // This variable is guaranteed to be PaymentItem[] for use in memos
+  // This makes sure that we always have an array of payment items to work with, even if the data is still loading.
   const paymentDataForMemo: PaymentItem[] = queryData ?? [];
 
   /* ---------------------------------------------------------------------- */
   /* Derived Data                                                           */
   /* ---------------------------------------------------------------------- */
+  // This sorts the payment items by date, with the most recent items first.
   const sorted: PaymentItem[] = useMemo(() => {
     return [...paymentDataForMemo].sort(
       (a: PaymentItem, b: PaymentItem) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   }, [paymentDataForMemo]);
 
+  // This calculates the total amount of all the payment items.
   const total: number = useMemo(() => {
     return paymentDataForMemo.reduce(
       (sum: number, item: PaymentItem) => sum + item.amount,
@@ -332,6 +418,7 @@ const SummaryPage: React.FC = () => {
     );
   }, [paymentDataForMemo]);
 
+  // This gets the full category objects for the selected category IDs.
   const selectedCategories = useMemo(() => {
     return allCategories.filter(cat => cat.name !== "UNCLASSIFIED" && selectedCategoryIds.includes(cat.id));
   }, [allCategories, selectedCategoryIds]);
@@ -339,6 +426,7 @@ const SummaryPage: React.FC = () => {
   /* ---------------------------------------------------------------------- */
   /* Callbacks                                                              */
   /* ---------------------------------------------------------------------- */
+  // This function is called when you click the "Add Category" button.
   const handleAddCategory = useCallback(() => {
     if (selectedDropdownCategory && !selectedCategoryIds.includes(selectedDropdownCategory as number)) {
       setSelectedCategoryIds(prev => [...prev, selectedDropdownCategory as number]);
@@ -346,21 +434,23 @@ const SummaryPage: React.FC = () => {
     }
   }, [selectedDropdownCategory, selectedCategoryIds]);
 
+  // This function is called when you click the "x" on a category tag.
   const handleRemoveCategory = useCallback((categoryId: number) => {
     setSelectedCategoryIds(prev => prev.filter(id => id !== categoryId));
   }, []);
 
+  // This function is called when you click the "Reset All" button.
   const handleResetFilters = useCallback(() => {
     setSelectedCategoryIds([]);
   }, []);
 
+  // This function is called when you click the menu icon.
   const handleMenu = useCallback(() => {
-    // TODO: open side-drawer with additional navigation
-    // Placeholder – no-op for now
-    // eslint-disable-next-line no-console
+    // In the future, this will open a side menu.
     console.info('Menu clicked');
   }, []);
 
+  // This function is called when you click the "ADD" button.
   const handleAdd = useCallback(() => {
     navigate('/add');
   }, [navigate]);
@@ -369,6 +459,7 @@ const SummaryPage: React.FC = () => {
   /* Render                                                                 */
   /* ---------------------------------------------------------------------- */
 
+  // If there was an error fetching the payment items, we show an error message.
   if (error) return <p>Error: {error.message}</p>;
 
   return (
@@ -383,10 +474,7 @@ const SummaryPage: React.FC = () => {
         }}
       >
         <h2>Payments</h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => navigate('/category-types')}>Category Types</button>
-          <button onClick={() => navigate('/categories')}>Categories</button>
-        </div>
+        <SortIcons />
       </div>
       <CategoryFilterWrapper>
         <h3>Filter by Categories</h3>
@@ -455,7 +543,7 @@ const SummaryPage: React.FC = () => {
           <TotalEntry>
             <TotalLabel>SUM</TotalLabel>
             <AmountContainer>
-              <AmountText negative={total < 0}>
+              <AmountText $negative={total < 0}>
                 {total.toFixed(2)} €
               </AmountText>
             </AmountContainer>
@@ -472,18 +560,22 @@ export default SummaryPage;
 /* Child component: PaymentItemLine                                           */
 /* -------------------------------------------------------------------------- */
 
+// This defines the "props" that our PaymentItemLine component accepts.
 interface PaymentItemLineProps {
-  item: PaymentItem;
-  allCategories: Category[];
-  standardTypeId: number | undefined;
+  item: PaymentItem; // The payment item to display.
+  allCategories: Category[]; // The list of all categories.
+  standardTypeId: number | undefined; // The ID of the "standard" category type.
 }
 
+// This component displays a single payment item in our list.
 const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, standardTypeId }) => {
-  // Using attachment_url for the image as per PaymentItem type
+  // This gets the URL for the payment item's image.
   const imageUrl = item.attachment_url;
-  const { data: fetchedRecipient } = useRecipient(item.recipient_id);
+  // This fetches the recipient information for the payment item.
+  const { data: fetchedRecipient } = useRecipient(item.recipient_id ?? undefined);
   const recipient = item.recipient ?? fetchedRecipient;
 
+  // This finds the icon for the payment item's category.
   const iconUrl = React.useMemo(() => {
     if (!item.categories || !standardTypeId) return null;
     const cat = item.categories.find(c => c.type_id === standardTypeId);
@@ -525,7 +617,7 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
           {/* Enhanced recipient information display */}
           {recipient && (
             <RecipientInfo>
-              <div className="name">To/From: {recipient.name}</div>
+              <div className="name"> { isExpense(item) ? (<u>To:</u>) : (<u>From:</u>) }  {recipient.name}</div>
               {recipient.address && (
                 <div className="address">{recipient.address}</div>
               )}
@@ -547,7 +639,7 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
           {iconUrl && (
             <img src={iconUrl} alt="category icon" style={{ width: '20px', height: '20px', marginRight: '0.25rem' }} />
           )}
-          <AmountText negative={isExpense(item)}>
+          <AmountText $negative={isExpense(item)}>
             {item.amount.toFixed(2)} €
           </AmountText>
         </AmountContainer>
