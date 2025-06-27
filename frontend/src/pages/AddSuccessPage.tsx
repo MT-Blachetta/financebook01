@@ -6,7 +6,7 @@
  * - Shows "OK, payment added successfully" in green
  * - Has a "Back" button to redirect to the summary page
  */
-import React from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 
@@ -44,9 +44,19 @@ const BackButton = styled.button`
 const AddSuccessPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     navigate('/');
-  };
+  }, [navigate]);
+
+  // Automatically navigate back to the summary page after 3 seconds.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleBack();
+    }, 3000);
+
+    // Clean up the timer if the component unmounts before the timer fires.
+    return () => clearTimeout(timer);
+  }, [handleBack]);
 
   return (
     <PageContainer>
