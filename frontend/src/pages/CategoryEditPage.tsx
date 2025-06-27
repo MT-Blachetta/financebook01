@@ -113,8 +113,6 @@ interface CategoryRowProps {
   cat: Category;
   categories: Category[];
   types: CategoryType[];
-  standardTypeId?: number;
-  standardRootId?: number;
   getDescendants(id: number): number[];
 }
 
@@ -122,8 +120,6 @@ const CategoryRow: React.FC<CategoryRowProps> = ({
   cat,
   categories,
   types,
-  standardTypeId,
-  standardRootId,
   getDescendants,
 }) => {
   const [parentId, setParentId] = useState<number | null>(cat.parent_id ?? null);
@@ -164,9 +160,6 @@ const CategoryRow: React.FC<CategoryRowProps> = ({
     await updateMutation.mutateAsync({ parent_id: parentId, type_id: typeId, icon_file });
   };
 
-  const disableTypeSelect =
-    standardTypeId && standardRootId && cat.type_id === standardTypeId && cat.id === standardRootId;
-
   return (
     <EntryGrid>
       <span>{cat.name}</span>
@@ -184,20 +177,16 @@ const CategoryRow: React.FC<CategoryRowProps> = ({
           ))}
         </StyledSelect>
       </Cell>
-      {!disableTypeSelect ? (
-        <Cell>
-          <Label>Type</Label>
-          <StyledSelect value={typeId} onChange={(e) => setTypeId(parseInt(e.target.value))}>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </StyledSelect>
-        </Cell>
-      ) : (
-        <div />
-      )}
+      <Cell>
+        <Label>Type</Label>
+        <StyledSelect value={typeId} onChange={(e) => setTypeId(parseInt(e.target.value))}>
+          {types.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </StyledSelect>
+      </Cell>
       <IconBox onClick={() => fileRef.current?.click()}>
         {preview ? (
           <img src={preview} alt="icon preview" />
@@ -293,8 +282,6 @@ export default function CategoryEditPage() {
           cat={cat}
           categories={categories}
           types={types}
-          standardTypeId={standardTypeId}
-          standardRootId={sorted[0]?.id}
           getDescendants={getDescendants}
         />
       ))}

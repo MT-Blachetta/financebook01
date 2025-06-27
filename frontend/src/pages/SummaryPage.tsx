@@ -42,12 +42,14 @@ const SortIconsContainer = styled.div`
 `;
 
 // This is a wrapper for each individual icon to handle hover effects.
-const IconWrapper = styled.div`
+const IconWrapper = styled.div<{ $active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0.3rem;
   transition: background-color 0.2s ease-in-out;
+  border-radius: var(--radius-sm);
+  background-color: ${({ $active }) => ($active ? '#444' : 'transparent')};
 
   img {
     width: 25px; // Sets the width of the icon.
@@ -320,22 +322,31 @@ const TotalLabel = styled.div`
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
 
+interface SortIconsProps {
+  sortOrder: 'asc' | 'desc';
+  onSortAsc: () => void;
+  onSortDesc: () => void;
+}
+
 /**
  * SortIcons component renders the up and down arrows for sorting.
  * - 'up.svg' is for descending order.
  * - 'down.svg' is for ascending order.
  */
-const SortIcons: React.FC = () => (
-    <SortIconsContainer>
-      <IconWrapper>
-        <img id="sort-desc-icon" src={UpIcon} alt="Sort descending by date" />
-      </IconWrapper>
-      <IconWrapper>
-        <img id="sort-asc-icon" src={DownIcon} alt="Sort ascending by date" />
-      </IconWrapper>
-    </SortIconsContainer>
+const SortIcons: React.FC<SortIconsProps> = ({
+  sortOrder,
+  onSortAsc,
+  onSortDesc,
+}) => (
+  <SortIconsContainer>
+    <IconWrapper onClick={onSortDesc} $active={sortOrder === 'desc'}>
+      <img id="sort-desc-icon" src={UpIcon} alt="Sort descending by date" />
+    </IconWrapper>
+    <IconWrapper onClick={onSortAsc} $active={sortOrder === 'asc'}>
+      <img id="sort-asc-icon" src={DownIcon} alt="Sort ascending by date" />
+    </IconWrapper>
+  </SortIconsContainer>
 );
-
 
 // This is the main component for our summary page.
 const SummaryPage: React.FC = () => {
@@ -350,6 +361,7 @@ const SummaryPage: React.FC = () => {
   const initialCategoryIds = searchParams.getAll('categories').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>(initialCategoryIds);
   const [selectedDropdownCategory, setSelectedDropdownCategory] = useState<number | ''>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // This fetches all the categories and category types from the server.
   const { data: allCategories = [], isLoading: isLoadingCategories } = useAllCategories();
@@ -405,10 +417,15 @@ const SummaryPage: React.FC = () => {
   /* ---------------------------------------------------------------------- */
   // This sorts the payment items by date, with the most recent items first.
   const sorted: PaymentItem[] = useMemo(() => {
-    return [...paymentDataForMemo].sort(
-      (a: PaymentItem, b: PaymentItem) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-  }, [paymentDataForMemo]);
+    return [...paymentDataForMemo].sort((a: PaymentItem, b: PaymentItem) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (sortOrder === 'desc') {
+        return dateB - dateA;
+      }
+      return dateA - dateB;
+    });
+  }, [paymentDataForMemo, sortOrder]);
 
   // This calculates the total amount of all the payment items.
   const total: number = useMemo(() => {
@@ -474,7 +491,11 @@ const SummaryPage: React.FC = () => {
         }}
       >
         <h2>Payments</h2>
-        <SortIcons />
+        <SortIcons
+          sortOrder={sortOrder}
+          onSortAsc={() => setSortOrder('asc')}
+          onSortDesc={() => setSortOrder('desc')}
+        />
       </div>
       <CategoryFilterWrapper>
         <h3>Filter by Categories</h3>
