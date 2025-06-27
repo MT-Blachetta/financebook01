@@ -152,7 +152,8 @@ const CategoryRow: React.FC<CategoryRowProps> = ({
     (c) =>
       c.type_id === typeId &&
       c.id !== cat.id &&
-      !getDescendants(cat.id).includes(c.id)
+      !getDescendants(cat.id).includes(c.id) &&
+      c.name !== "UNCLASSIFIED"
   );
 
   const handleSave = async () => {
@@ -227,11 +228,11 @@ export default function CategoryEditPage() {
   const standardTypeId = useMemo(() => types.find(t => t.name === 'standard')?.id, [types]);
 
   const sorted = useMemo(() => {
-    if (!standardTypeId) return categories;
+    if (!standardTypeId) return categories.filter(c => c.name !== "UNCLASSIFIED");
     const standardIndex = categories.findIndex(c => c.type_id === standardTypeId);
-    if (standardIndex === -1) return categories;
+    if (standardIndex === -1) return categories.filter(c => c.name !== "UNCLASSIFIED");
     const rest = categories.filter((_, idx) => idx !== standardIndex);
-    return [categories[standardIndex], ...rest];
+    return [categories[standardIndex], ...rest].filter(c => c.name !== "UNCLASSIFIED");
   }, [categories, standardTypeId]);
 
   const childrenMap = useMemo(() => {
