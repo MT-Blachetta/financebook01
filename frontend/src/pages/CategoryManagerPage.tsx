@@ -148,8 +148,6 @@ const CategoryManagerPage: React.FC = () => {
 
   return (
     <PageWrapper>
-      <h1>Category Management</h1>
-
       <SectionTitle>Category Types</SectionTitle>
       <Form onSubmit={handleAddCategoryType}>
         <h3>Add New Category Type</h3>
