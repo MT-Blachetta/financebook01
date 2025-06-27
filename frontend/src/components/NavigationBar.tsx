@@ -6,7 +6,7 @@
  * • Displays application title
  * • Provides quick filters (All ▾, Expenses, Incomes) as described
  * • Offers a hamburger menu on small screens to open additional navigation
- *   (future extensions: category editor, settings, etc.)
+ * (future extensions: category editor, settings, etc.)
  *
  * The component is *presentational* – it receives the active filter and
  * callbacks via props.  State-management lives higher up (e.g. in
@@ -16,7 +16,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import clsx from 'clsx';
-
+import { useNavigate } from 'react-router-dom';
 import menuIconUrl from '../assets/menu.svg';
 
 /* -------------------------------------------------------------------------- */
@@ -34,7 +34,6 @@ interface NavigationBarProps {
 
   /** Optional callback when user clicks the ADD button. */
   onAdd?(): void;
-
 }
 
 /* -------------------------------------------------------------------------- */
@@ -46,8 +45,13 @@ const Bar = styled.header`
   padding: var(--spacing-sm) var(--spacing-md);
   display: flex;
   align-items: center;
-  justify-content: space-between;
   border-bottom: 1px solid #272727;
+`;
+
+const LeftSection = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
 `;
 
 const Title = styled.h1`
@@ -60,6 +64,7 @@ const Title = styled.h1`
 const Filters = styled.nav`
   display: flex;
   gap: var(--spacing-sm);
+  margin-left: 20rem;
 
   button {
     background: none;
@@ -78,6 +83,33 @@ const Filters = styled.nav`
 
   @media (max-width: 480px) {
     display: none; /* collapse into menu on small viewports */
+  }
+`;
+
+const CategoryEditButtons = styled.div`
+  display: flex;
+  gap: var(--spacing-sm);
+
+  button {
+    background: none;
+    border: 1px solid #444; /* Add a subtle border to distinguish them */
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: #333;
+      color: var(--color-text-primary);
+      border-color: #555;
+    }
+  }
+
+  /* Hide on smaller screens to avoid clutter; these links are in the drawer */
+  @media (max-width: 768px) {
+    display: none;
   }
 `;
 
@@ -123,6 +155,7 @@ const MenuButton = styled.button`
 const RightSection = styled.div`
   display: flex;
   align-items: center;
+  margin-left: auto;
   gap: var(--spacing-md);
 `;
 
@@ -134,11 +167,19 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
   active,
   onChange,
   onMenu,
-  onAdd
+  onAdd,
 }) => {
+  const navigate = useNavigate();
+
   return (
     <Bar>
-      <Title>FinanceBook</Title>
+      <LeftSection>
+        <Title>FinanceBook</Title>
+        <CategoryEditButtons>
+          <button onClick={() => navigate('/categories')}>Categories</button>
+          <button onClick={() => navigate('/category-types')}>Category Types</button>
+        </CategoryEditButtons>
+      </LeftSection>
 
       <Filters>
         <button
@@ -162,11 +203,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
       </Filters>
 
       <RightSection>
-        {onAdd && (
-          <AddButton onClick={onAdd}>
-            ADD
-          </AddButton>
-        )}
+        {onAdd && <AddButton onClick={onAdd}>ADD</AddButton>}
         <MenuButton aria-label="Open Menu" onClick={onMenu}>
           <img src={menuIconUrl} alt="Menu" />
         </MenuButton>
