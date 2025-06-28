@@ -40,12 +40,14 @@ interface NavigationBarProps {
 /* Styled Components                                                          */
 /* -------------------------------------------------------------------------- */
 
+
 const Bar = styled.header`
   background: var(--color-surface);
   padding: var(--spacing-sm) var(--spacing-md);
   display: flex;
   align-items: center;
   border-bottom: 1px solid #272727;
+  position: relative; /* allow absolute positioning of Filters */
 `;
 
 const LeftSection = styled.div`
@@ -64,8 +66,9 @@ const Title = styled.h1`
 const Filters = styled.nav`
   display: flex;
   gap: var(--spacing-sm);
-  margin-left: 20rem;
-
+  position: absolute; /* center independently of siblings */
+  left: 50%;
+  transform: translateX(-50%);
   button {
     background: none;
     border: none;
@@ -85,6 +88,7 @@ const Filters = styled.nav`
     display: none; /* collapse into menu on small viewports */
   }
 `;
+
 
 const CategoryEditButtons = styled.div`
   display: flex;
