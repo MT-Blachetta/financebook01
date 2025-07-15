@@ -111,7 +111,7 @@ docker run -d \
   -e POSTGRES_PASSWORD=secretPassword \
   -e POSTGRES_DB=financebook \
   -p 5432:5432 \
-  -v postgres_data:/var/lib/postgresql/data \
+  -v postgres_data: database \
   postgres:15
 ```
 Remember to set the DATABASE_URL correctly.
