@@ -6,6 +6,7 @@ session management. Keeping these details in one place makes it trivial to swap
 out SQLite for PostgreSQL, run migrations, or mock the database in tests.
 """
 import os
+from dotenv import load_dotenv
 from sqlmodel import SQLModel, create_engine, Session
 
 # --------------------------------------------------------------------------- #
@@ -14,6 +15,7 @@ from sqlmodel import SQLModel, create_engine, Session
 # If no DATABASE_URL environment variable is present we fall back to a local
 # on-disk SQLite database. Developers can override this to point at
 # `postgresql+psycopg2://user:pass@host/dbname` or similar.
+load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./financebook.db")
 
 # SQLite requires an extra flag when used in a multi-threaded environment like
