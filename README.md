@@ -83,22 +83,38 @@ You need Node.js and npm (or yarn) for the frontend, and Python with pip for the
 
 ### 1. Backend (FastAPI)
 
-Navigate to the project root directory (`financebook01`).
+Navigate to the project root directory (`financebook01/app`).
 
 **Setup:**
 
 1.  **Create a virtual environment (recommended):**
+2.  Before Creating the virtual environment, store the DATABASE_URL to the '.env' file,
+    then create and activate the virtual environment with: 
     ```bash
     python -m venv .venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
-2.  **Install dependencies:**
+4.  **Install dependencies:**
     ```bash
+    pip install --upgrade pip setuptools wheel
     pip install -r requirements.txt
     ```
 The `requirements.txt` file should include `fastapi`, `uvicorn`, `sqlmodel`, etc.
 If you get a "uvicorn: command not found" error, ensure the virtual environment is activated
 and the dependencies were installed with `pip install -r requirements.txt`.
+
+**Start the postgresql docker container**
+```bash
+docker run -d \
+  --name financebook-db \
+  -e POSTGRES_USER=yourself \
+  -e POSTGRES_PASSWORD=secretPassword \
+  -e POSTGRES_DB=financebook \
+  -p 5432:5432 \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:15
+```
+Remember to set the DATABASE_URL correctly.
 
 **Running the backend server:**
 
