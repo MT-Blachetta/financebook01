@@ -83,17 +83,19 @@ You need Node.js and npm (or yarn) for the frontend, and Python with pip for the
 
 ### 1. Backend (FastAPI)
 
-Navigate to the project root directory (`financebook01/app`).
+Navigate to the project root directory (`financebook01`).
 
 **Setup:**
 
 1.  **Create a virtual environment (recommended):**
-2.  Before Creating the virtual environment, store the DATABASE_URL to the '.env' file,
+2.  Before Creating the virtual environment, store the DATABASE_URL to the previous created '.env' file
+    (DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook),
     then create and activate the virtual environment with: 
     ```bash
     python -m venv .venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
+    next you
 4.  **Install dependencies:**
     ```bash
     pip install --upgrade pip setuptools wheel
@@ -103,18 +105,12 @@ The `requirements.txt` file should include `fastapi`, `uvicorn`, `sqlmodel`, etc
 If you get a "uvicorn: command not found" error, ensure the virtual environment is activated
 and the dependencies were installed with `pip install -r requirements.txt`.
 
-**Start the postgresql docker container**
+**Create Docker image and start the postgresql docker container**
 ```bash
-docker run -d \
-  --name financebook-db \
-  -e POSTGRES_USER=yourself \
-  -e POSTGRES_PASSWORD=secretPassword \
-  -e POSTGRES_DB=financebook \
-  -p 5432:5432 \
-  -v postgres_data: database \
-  postgres:15
+sudo docker build -t financebook-postgres .
+sudo docker run -d --name financebook-db -p 5432:5432 -v postgres_data:/home/username/Projects/database financebook-postgres
 ```
-Remember to set the DATABASE_URL correctly.
+Remember to set the DATABASE_URL correctly matching the credentials in the Dockerfile.
 
 **Running the backend server:**
 
