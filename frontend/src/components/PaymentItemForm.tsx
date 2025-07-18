@@ -14,7 +14,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { Recipient, Category, PaymentItemFormData } from '../types';
+import { Recipient, Category, PaymentItemFormData, PaymentItem } from '../types';
 import {
   useRecipients,
   useCategoriesByType,
@@ -265,25 +265,49 @@ const ErrorMessage = styled.div`
   margin-top: 0.5rem;
 `;
 
-export const PaymentItemForm: React.FC = () => {
+interface PaymentItemFormProps {
+  initialData?: PaymentItem;
+  onSubmit?: (data: PaymentItemFormData) => void | Promise<void>;
+  isSubmitting?: boolean;
+  submitError?: string | null;
+}
+
+export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
+  initialData,
+  onSubmit,
+  isSubmitting = false,
+  submitError,
+}) => {
   const navigate = useNavigate();
-  
+
+  const isEditMode = Boolean(onSubmit && initialData);
+
   // Form state
-  const [amount, setAmount] = useState<string>('');
-  const [isPositive, setIsPositive] = useState<boolean>(true); // true for income (+), false for expense (-)
-  const [periodic, setPeriodic] = useState<boolean>(false);
-  
+  const [amount, setAmount] = useState<string>(
+    initialData ? Math.abs(initialData.amount).toString() : ''
+  );
+  const [isPositive, setIsPositive] = useState<boolean>(
+    initialData ? initialData.amount >= 0 : true
+  );
+  const [periodic, setPeriodic] = useState<boolean>(initialData?.periodic ?? false);
+
   // Payment description state
-  const [paymentDescription, setPaymentDescription] = useState<string>('');
-  
+  const [paymentDescription, setPaymentDescription] = useState<string>(initialData?.description ?? '');
+
   // Recipient state
-  const [selectedRecipientId, setSelectedRecipientId] = useState<string>('');
+  const [selectedRecipientId, setSelectedRecipientId] = useState<string>(
+    initialData?.recipient_id ? initialData.recipient_id.toString() : ''
+  );
   const [recipientName, setRecipientName] = useState<string>('');
   const [recipientAddress, setRecipientAddress] = useState<string>('');
   const [recipientModified, setRecipientModified] = useState<boolean>(false);
-  
+
   // Category state
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(
+    initialData && initialData.categories && initialData.categories[0]
+      ? initialData.categories[0].id.toString()
+      : ''
+  );
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   
   // Error state
@@ -295,6 +319,19 @@ export const PaymentItemForm: React.FC = () => {
   const createPaymentMutation = useCreatePaymentItem();
   const createRecipientMutation = useCreateRecipient();
   const createCategoryMutation = useCreateCategory();
+
+  // When initialData is loaded asynchronously, populate form state
+  useEffect(() => {
+    if (!initialData) return;
+    setAmount(Math.abs(initialData.amount).toString());
+    setIsPositive(initialData.amount >= 0);
+    setPeriodic(initialData.periodic);
+    setPaymentDescription(initialData.description ?? '');
+    setSelectedRecipientId(initialData.recipient_id ? initialData.recipient_id.toString() : '');
+    if (initialData.categories && initialData.categories[0]) {
+      setSelectedCategoryId(initialData.categories[0].id.toString());
+    }
+  }, [initialData]);
 
   // Handle recipient selection from dropdown
   const handleRecipientSelect = (recipientId: string) => {
@@ -383,15 +420,19 @@ export const PaymentItemForm: React.FC = () => {
     }
     
     try {
-      // Create the payment data
+      // Build the payment data
       const paymentData: PaymentItemFormData = {
         amount: isPositive ? numericAmount : -numericAmount,
-        date: new Date().toISOString(), // System timestamp as requested
+        date: isEditMode && initialData ? initialData.date : new Date().toISOString(),
         periodic,
         description: paymentDescription.trim() || null,
         recipient_id: null,
         category_ids: [],
       };
+
+      if (isEditMode && initialData?.id !== undefined) {
+        paymentData.id = initialData.id;
+      }
       
       // Handle recipient assignment
       if (selectedRecipientId && !selectedRecipientId.startsWith('new:')) {
@@ -403,21 +444,23 @@ export const PaymentItemForm: React.FC = () => {
         paymentData.category_ids = [parseInt(selectedCategoryId)];
       }
       
-      // Submit the payment
-      await createPaymentMutation.mutateAsync(paymentData);
-      
-      // Navigate to success page
-      navigate('/add-success');
+      if (isEditMode && onSubmit) {
+        await onSubmit(paymentData);
+      } else {
+        await createPaymentMutation.mutateAsync(paymentData);
+        // Navigate to success page
+        navigate('/add-success');
+      }
       
     } catch (error) {
       console.error('Error creating payment:', error);
-      setError('Failed to create payment. Please try again.');
+      setError('Failed to submit payment. Please try again.');
     }
   };
 
   return (
     <FormContainer>
-      <PageTitle>Add New Payment</PageTitle>
+      <PageTitle>{isEditMode ? 'Edit Payment' : 'Add New Payment'}</PageTitle>
       
       <form onSubmit={handleSubmit}>
         {/* Amount Field with +/- Toggle */}
@@ -550,14 +593,17 @@ export const PaymentItemForm: React.FC = () => {
           </CategoryArea>
         </FormField>
 
+        {submitError && <ErrorMessage>{submitError}</ErrorMessage>}
         {error && <ErrorMessage>{error}</ErrorMessage>}
 
         {/* Submit Button */}
-        <SubmitButton 
-          type="submit" 
-          disabled={createPaymentMutation.isPending || !amount}
+        <SubmitButton
+          type="submit"
+          disabled={(isEditMode ? isSubmitting : createPaymentMutation.isPending) || !amount}
         >
-          {createPaymentMutation.isPending ? 'Creating...' : 'Submit'}
+          {isEditMode
+            ? isSubmitting ? 'Updating...' : 'Update'
+            : createPaymentMutation.isPending ? 'Creating...' : 'Submit'}
         </SubmitButton>
       </form>
     </FormContainer>
