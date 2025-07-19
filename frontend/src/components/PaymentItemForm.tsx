@@ -21,6 +21,8 @@ import {
   useCreatePaymentItem,
   useCreateRecipient,
   useCreateCategory,
+  useUploadInvoice,
+  useDeleteInvoice,
 } from '../api/hooks';
 
 // Styled components for customer-specified UI
@@ -265,6 +267,130 @@ const ErrorMessage = styled.div`
   margin-top: 0.5rem;
 `;
 
+// Invoice upload area
+const InvoiceUploadArea = styled.div`
+  background: #2a2a2a;
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: 1px solid #444;
+`;
+
+const FileUploadContainer = styled.div<{ isDragOver: boolean; hasFile: boolean }>`
+  border: 2px dashed ${props => props.isDragOver ? 'var(--color-positive)' : (props.hasFile ? 'var(--color-positive)' : '#666')};
+  border-radius: var(--radius-md);
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: ${props => props.isDragOver ? 'rgba(46, 204, 113, 0.1)' : 'transparent'};
+
+  &:hover {
+    border-color: var(--color-positive);
+    background: rgba(46, 204, 113, 0.05);
+  }
+`;
+
+const FileUploadIcon = styled.div`
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #888;
+`;
+
+const FileUploadText = styled.div`
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+`;
+
+const FileUploadSubtext = styled.div`
+  color: #666;
+  font-size: 0.8rem;
+`;
+
+const FileInfo = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #333;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  margin-top: 1rem;
+`;
+
+const FileDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const FileName = styled.div`
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+`;
+
+const FileSize = styled.div`
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+`;
+
+const FileActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`;
+
+const FileActionButton = styled.button<{ variant?: 'danger' }>`
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  
+  background: ${props => props.variant === 'danger' ? 'var(--color-negative)' : '#555'};
+  color: white;
+
+  &:hover {
+    background: ${props => props.variant === 'danger' ? '#dc2626' : '#666'};
+  }
+
+  &:disabled {
+    background: #444;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const HiddenFileInput = styled.input`
+  display: none;
+`;
+
+const UploadProgress = styled.div`
+  margin-top: 1rem;
+`;
+
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div<{ progress: number }>`
+  height: 100%;
+  background: var(--color-positive);
+  width: ${props => props.progress}%;
+  transition: width 0.3s ease;
+`;
+
+const ProgressText = styled.div`
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  text-align: center;
+`;
+
 interface PaymentItemFormProps {
   initialData?: PaymentItem;
   onSubmit?: (data: PaymentItemFormData) => void | Promise<void>;
@@ -313,12 +439,20 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
   // Error state
   const [error, setError] = useState<string | null>(null);
   
+  // Invoice upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  
   // Hooks
   const { data: recipients, isLoading: loadingRecipients, refetch: refetchRecipients } = useRecipients();
   const { data: categories, isLoading: loadingCategories } = useCategoriesByType(1); // Type ID 1 = "standard"
   const createPaymentMutation = useCreatePaymentItem();
   const createRecipientMutation = useCreateRecipient();
   const createCategoryMutation = useCreateCategory();
+  const uploadInvoiceMutation = useUploadInvoice();
+  const deleteInvoiceMutation = useDeleteInvoice();
 
   // When initialData is loaded asynchronously, populate form state
   useEffect(() => {
@@ -407,6 +541,127 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
     }
   };
 
+  // File upload handlers
+  const validateFile = (file: File): string | null => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/bmp',
+      'image/tiff'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      return 'File type not supported. Please upload PDF, DOCX, DOC, or image files.';
+    }
+
+    const maxSize = 25 * 1024 * 1024; // 25MB
+    if (file.size > maxSize) {
+      return 'File size exceeds 25MB limit.';
+    }
+
+    return null;
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleFileSelect = (file: File) => {
+    const validationError = validateFile(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setSelectedFile(file);
+    setError(null);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleUploadInvoice = async () => {
+    if (!selectedFile || !initialData?.id) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90));
+      }, 100);
+
+      await uploadInvoiceMutation.mutateAsync({
+        paymentItemId: initialData.id,
+        file: selectedFile,
+      });
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      setSelectedFile(null);
+      setError(null);
+
+      // Reset progress after a short delay
+      setTimeout(() => {
+        setUploadProgress(0);
+        setIsUploading(false);
+      }, 1000);
+    } catch (error) {
+      setIsUploading(false);
+      setUploadProgress(0);
+      console.error('Error uploading invoice:', error);
+      setError('Failed to upload invoice. Please try again.');
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!initialData?.id) return;
+
+    try {
+      await deleteInvoiceMutation.mutateAsync(initialData.id);
+      setError(null);
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      setError('Failed to delete invoice. Please try again.');
+    }
+  };
+
+  const handleRemoveSelectedFile = () => {
+    setSelectedFile(null);
+    setError(null);
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -447,7 +702,41 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
       if (isEditMode && onSubmit) {
         await onSubmit(paymentData);
       } else {
-        await createPaymentMutation.mutateAsync(paymentData);
+        // Create the payment item first
+        const createdPayment = await createPaymentMutation.mutateAsync(paymentData);
+        
+        // If there's a selected file, upload it after payment creation
+        if (selectedFile && createdPayment.id) {
+          try {
+            setIsUploading(true);
+            setUploadProgress(0);
+            
+            // Simulate progress for better UX
+            const progressInterval = setInterval(() => {
+              setUploadProgress(prev => Math.min(prev + 10, 90));
+            }, 100);
+
+            await uploadInvoiceMutation.mutateAsync({
+              paymentItemId: createdPayment.id,
+              file: selectedFile,
+            });
+
+            clearInterval(progressInterval);
+            setUploadProgress(100);
+            
+            // Reset progress after a short delay
+            setTimeout(() => {
+              setUploadProgress(0);
+              setIsUploading(false);
+            }, 500);
+          } catch (uploadError) {
+            console.error('Error uploading invoice after payment creation:', uploadError);
+            setError('Payment created successfully, but failed to upload invoice. You can upload it later by editing the payment.');
+            setIsUploading(false);
+            setUploadProgress(0);
+          }
+        }
+        
         // Navigate to success page
         navigate('/add-success');
       }
@@ -591,6 +880,114 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
               </AddCategoryButton>
             </CategoryInputContainer>
           </CategoryArea>
+        </FormField>
+
+        {/* Invoice Upload - Show in both add and edit modes */}
+        <FormField>
+          <Label>Invoice Document</Label>
+          <InvoiceUploadArea>
+            {/* Show current invoice status in edit mode */}
+            {isEditMode && initialData && initialData.invoice_path && !selectedFile && (
+              <FileInfo>
+                <FileDetails>
+                  <FileName>Invoice uploaded</FileName>
+                  <FileSize>Click download to view file</FileSize>
+                </FileDetails>
+                <FileActions>
+                  <FileActionButton
+                    type="button"
+                    onClick={() => window.open(`/api/download-invoice/${initialData.id}`, '_blank')}
+                  >
+                    Download
+                  </FileActionButton>
+                  <FileActionButton
+                    type="button"
+                    variant="danger"
+                    onClick={handleDeleteInvoice}
+                    disabled={deleteInvoiceMutation.isPending}
+                  >
+                    {deleteInvoiceMutation.isPending ? 'Deleting...' : 'Delete'}
+                  </FileActionButton>
+                </FileActions>
+              </FileInfo>
+            )}
+
+            {/* File upload area */}
+            {!isUploading && (
+              <>
+                <HiddenFileInput
+                  ref={(input) => {
+                    if (input) {
+                      input.onclick = () => input.click();
+                    }
+                  }}
+                  type="file"
+                  accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.gif,.bmp,.tiff"
+                  onChange={handleFileInputChange}
+                />
+                
+                <FileUploadContainer
+                  isDragOver={isDragOver}
+                  hasFile={!!selectedFile}
+                  onClick={() => (document.querySelector('input[type="file"]') as HTMLInputElement)?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <FileUploadIcon>📄</FileUploadIcon>
+                  <FileUploadText>
+                    {selectedFile ? 
+                      (isEditMode ? 'File selected - click upload to save' : 'File selected - will be uploaded after payment creation') : 
+                     (isEditMode && initialData?.invoice_path ? 'Drop a new file here or click to replace' :
+                      'Drop your invoice here or click to browse')}
+                  </FileUploadText>
+                  <FileUploadSubtext>
+                    Supports PDF, DOCX, DOC, and image files up to 25MB
+                  </FileUploadSubtext>
+                </FileUploadContainer>
+              </>
+            )}
+
+            {/* Selected file info */}
+            {selectedFile && !isUploading && (
+              <FileInfo>
+                <FileDetails>
+                  <FileName>{selectedFile.name}</FileName>
+                  <FileSize>{formatFileSize(selectedFile.size)}</FileSize>
+                </FileDetails>
+                <FileActions>
+                  {isEditMode && (
+                    <FileActionButton
+                      type="button"
+                      onClick={handleUploadInvoice}
+                      disabled={uploadInvoiceMutation.isPending}
+                    >
+                      Upload
+                    </FileActionButton>
+                  )}
+                  <FileActionButton
+                    type="button"
+                    variant="danger"
+                    onClick={handleRemoveSelectedFile}
+                  >
+                    Remove
+                  </FileActionButton>
+                </FileActions>
+              </FileInfo>
+            )}
+
+            {/* Upload progress */}
+            {isUploading && (
+              <UploadProgress>
+                <ProgressBar>
+                  <ProgressFill progress={uploadProgress} />
+                </ProgressBar>
+                <ProgressText>
+                  Uploading... {uploadProgress}%
+                </ProgressText>
+              </UploadProgress>
+            )}
+          </InvoiceUploadArea>
         </FormField>
 
         {submitError && <ErrorMessage>{submitError}</ErrorMessage>}

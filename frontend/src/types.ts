@@ -55,6 +55,7 @@ export interface PaymentItem {
 
   categories?: Category[]; // resolved by backend JOIN
   attachment_url?: string | null; // presigned link to image/PDF on object-store
+  invoice_path?: string | null; // filename of uploaded invoice document
 }
 
 /** Helper to distinguish incomes and expenses on the client. */

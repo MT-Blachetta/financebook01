@@ -43,6 +43,10 @@ app = FastAPI(title="FinanceBook API", version="0.1.0")
 ICON_DIR = Path("icons")
 ICON_DIR.mkdir(exist_ok=True)
 
+# Directory where uploaded invoice files are stored
+INVOICE_DIR = Path("app/invoices")
+INVOICE_DIR.mkdir(exist_ok=True)
+
 
 @app.on_event("startup")
 def on_startup() -> None:
@@ -292,9 +296,18 @@ def update_payment_item(
 
 @app.delete("/payment-items/{item_id}", status_code=204)
 def delete_payment_item(item_id: int, session: Session = Depends(get_session)) -> None:
+    import os
+    
     item = session.get(PaymentItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Delete associated invoice file if it exists
+    if item.invoice_path:
+        file_path = INVOICE_DIR / item.invoice_path
+        if file_path.exists():
+            os.remove(file_path)
+    
     session.delete(item)
     session.commit()
 
@@ -446,3 +459,129 @@ def download_icon(filename: str) -> FileResponse:
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
+
+
+# ---------------------------------------------------------------------------
+# Invoice File Upload/Download Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/upload-invoice/{payment_item_id}")
+def upload_invoice(
+    payment_item_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Upload an invoice file for a payment item."""
+    import os
+    import uuid
+    
+    # Validate payment item exists
+    payment_item = session.get(PaymentItem, payment_item_id)
+    if not payment_item:
+        raise HTTPException(status_code=404, detail="Payment item not found")
+    
+    # Validate file type
+    allowed_types = {
+        'application/pdf': '.pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/msword': '.doc',
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/gif': '.gif',
+        'image/bmp': '.bmp',
+        'image/tiff': '.tiff'
+    }
+    
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File type {file.content_type} not allowed. Supported types: PDF, DOCX, DOC, JPEG, PNG, GIF, BMP, TIFF"
+        )
+    
+    # Validate file size (25MB limit)
+    max_size = 25 * 1024 * 1024  # 25MB in bytes
+    file_content = file.file.read()
+    if len(file_content) > max_size:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+    
+    # Reset file pointer
+    file.file.seek(0)
+    
+    # Delete existing invoice file if it exists
+    if payment_item.invoice_path:
+        old_file_path = INVOICE_DIR / payment_item.invoice_path
+        if old_file_path.exists():
+            os.remove(old_file_path)
+    
+    # Generate unique filename
+    file_extension = allowed_types[file.content_type]
+    unique_filename = f"{payment_item_id}_{uuid.uuid4().hex}{file_extension}"
+    file_path = INVOICE_DIR / unique_filename
+    
+    # Save file
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    
+    # Update payment item with invoice path
+    payment_item.invoice_path = unique_filename
+    session.add(payment_item)
+    session.commit()
+    
+    return {
+        "message": "Invoice uploaded successfully",
+        "filename": unique_filename,
+        "payment_item_id": payment_item_id
+    }
+
+
+@app.get("/download-invoice/{payment_item_id}")
+def download_invoice(
+    payment_item_id: int,
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    """Download the invoice file for a payment item."""
+    # Validate payment item exists
+    payment_item = session.get(PaymentItem, payment_item_id)
+    if not payment_item:
+        raise HTTPException(status_code=404, detail="Payment item not found")
+    
+    if not payment_item.invoice_path:
+        raise HTTPException(status_code=404, detail="No invoice file found for this payment item")
+    
+    file_path = INVOICE_DIR / payment_item.invoice_path
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Invoice file not found on disk")
+    
+    return FileResponse(
+        file_path,
+        filename=f"invoice_{payment_item_id}_{payment_item.invoice_path}",
+        media_type='application/octet-stream'
+    )
+
+
+@app.delete("/invoice/{payment_item_id}")
+def delete_invoice(
+    payment_item_id: int,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Delete the invoice file for a payment item."""
+    import os
+    
+    # Validate payment item exists
+    payment_item = session.get(PaymentItem, payment_item_id)
+    if not payment_item:
+        raise HTTPException(status_code=404, detail="Payment item not found")
+    
+    if not payment_item.invoice_path:
+        raise HTTPException(status_code=404, detail="No invoice file found for this payment item")
+    
+    # Delete file from disk
+    file_path = INVOICE_DIR / payment_item.invoice_path
+    if file_path.exists():
+        os.remove(file_path)
+    
+    # Clear invoice path from database
+    payment_item.invoice_path = None
+    session.add(payment_item)
+    session.commit()
+    
+    return {"message": "Invoice deleted successfully"}

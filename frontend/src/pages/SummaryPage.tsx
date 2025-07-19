@@ -26,7 +26,7 @@ import DownIcon from '../assets/down.svg';
 // This imports the type for our view filter.
 import { ViewFilter } from '../components/NavigationBar';
 // This imports the functions that let us fetch data from our app's server.
-import { usePaymentItems, useAllCategories, useCategoryTypes, useRecipient } from '../api/hooks';
+import { usePaymentItems, useAllCategories, useCategoryTypes, useRecipient, downloadInvoice } from '../api/hooks';
 // This imports the data structures we use for payment items and categories.
 import { PaymentItem, isExpense, Category } from '../types';
 
@@ -208,6 +208,7 @@ const Entry = styled.li`
   gap: var(--spacing-md); // This adds some space between the content items.
   width: 100%; // This makes the item take up the full width of its container.
   box-sizing: border-box; // This makes sure the padding and border are included in the total width.
+  position: relative; // This allows us to position the download link absolutely within the entry.
 `;
 
 // This is the container for the payment item's image.
@@ -292,6 +293,29 @@ const CategoryChip = styled.span`
 const AmountContainer = styled.div`
   margin-left: auto; // This pushes the container to the right.
   text-align: right; // This aligns the text to the right.
+  position: relative; // This allows us to position the download link absolutely.
+`;
+
+// This is the download link for invoice files.
+const DownloadLink = styled.a`
+  position: absolute; // This positions the link absolutely within the Entry.
+  top: 1rem; // This positions the link at the top of the entry.
+  right: 1rem; // This positions the link at the right of the entry.
+  color:rgb(6, 116, 233); // This sets the text color to blue.
+  font-size: 0.9rem; // This sets the font size slightly bigger.
+  text-decoration: none; // This removes the underline.
+  cursor: pointer; // This shows a hand cursor when you hover over the link.
+  padding: 0.25rem 0.5rem; // This adds some padding for better click area.
+  border-radius: var(--radius-sm); // This rounds the corners.
+  transition: all 0.2s ease; // This creates a smooth transition on hover.
+  //background-color: rgba(0, 123, 255, 0.1); This adds a subtle background.
+  z-index: 10; // This ensures the link appears above other elements.
+
+  &:hover {
+    // background-color: rgba(0, 123, 255, 0.2); This adds a stronger background on hover.
+    text-decoration: underline; // This adds an underline on hover.
+    color:rgb(0, 123, 255); // This makes the color darker on hover.
+  }
 `;
 
 // This is the text for the amount.
@@ -615,8 +639,24 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
     navigate(`/payment/${item.id}/edit`);
   };
 
+  const handleDownloadInvoice = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the double-click edit
+    try {
+      await downloadInvoice(item.id);
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+    }
+  };
+
   return (
     <Entry onDoubleClick={handleDoubleClick}>
+      {/* Download link for invoice - positioned at top right of entry */}
+      {item.invoice_path && (
+        <DownloadLink onClick={handleDownloadInvoice}>
+          download
+        </DownloadLink>
+      )}
+      
       <ImageHolder>
         {imageUrl ? (
           <img src={imageUrl} alt="Payment attachment" />

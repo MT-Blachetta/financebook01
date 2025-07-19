@@ -377,3 +377,94 @@ export function useRecipient(recipientId: number | undefined) {
     enabled: recipientId !== undefined,
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* Invoice File Hooks                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Provides a mutation hook for uploading an invoice file for a payment item.
+ * Invalidates payment item queries on success.
+ * @returns React-Query mutation object.
+ */
+export function useUploadInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { message: string; filename: string; payment_item_id: number },
+    Error,
+    { paymentItemId: number; file: File }
+  >({
+    mutationFn: async ({ paymentItemId, file }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post<{ message: string; filename: string; payment_item_id: number }>(
+        `/upload-invoice/${paymentItemId}`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['payment-items'] });
+      queryClient.invalidateQueries({ queryKey: ['payment-item', data.payment_item_id] });
+    },
+  });
+}
+
+/**
+ * Provides a mutation hook for deleting an invoice file for a payment item.
+ * Invalidates payment item queries on success.
+ * @returns React-Query mutation object.
+ */
+export function useDeleteInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation<{ message: string }, Error, number>({
+    mutationFn: async (paymentItemId: number) => {
+      const res = await api.delete<{ message: string }>(`/invoice/${paymentItemId}`);
+      return res.data;
+    },
+    onSuccess: (_, paymentItemId) => {
+      queryClient.invalidateQueries({ queryKey: ['payment-items'] });
+      queryClient.invalidateQueries({ queryKey: ['payment-item', paymentItemId] });
+    },
+  });
+}
+
+/**
+ * Helper function to download an invoice file for a payment item.
+ * @param paymentItemId - The ID of the payment item
+ * @returns Promise that resolves when download starts
+ */
+export async function downloadInvoice(paymentItemId: number): Promise<void> {
+  try {
+    const response = await api.get(`/download-invoice/${paymentItemId}`, {
+      responseType: 'blob',
+    });
+    
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Try to get filename from Content-Disposition header
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `invoice_${paymentItemId}.pdf`;
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
+    
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error downloading invoice:', error);
+    throw error;
+  }
+}
