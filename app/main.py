@@ -197,47 +197,97 @@ def update_payment_item(
     item_update: PaymentItemUpdate,
     session: Session = Depends(get_session),
 ) -> PaymentItem:
-    db_item = session.get(PaymentItem, item_id)
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found")
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"Starting update for payment item {item_id}")
+        logger.info(f"Update data received: {item_update.dict(exclude_unset=True)}")
+        
+        db_item = session.get(PaymentItem, item_id)
+        if not db_item:
+            logger.error(f"Payment item {item_id} not found")
+            raise HTTPException(status_code=404, detail="Item not found")
 
-    # 1. Update standard fields
-    update_data = item_update.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        if key != "category_ids": # Defer category update
-            setattr(db_item, key, value)
+        logger.info(f"Found existing item: {db_item}")
 
-    # 2. Validate and update recipient if provided
-    if item_update.recipient_id:
-        recipient = session.get(Recipient, item_update.recipient_id)
-        if not recipient:
-            raise HTTPException(status_code=404, detail=f"Recipient with id {item_update.recipient_id} not found")
-        db_item.recipient_id = item_update.recipient_id
+        # 1. Update standard fields
+        update_data = item_update.dict(exclude_unset=True)
+        logger.info(f"Processing standard fields: {[k for k in update_data.keys() if k != 'category_ids']}")
+        
+        for key, value in update_data.items():
+            if key != "category_ids": # Defer category update
+                logger.debug(f"Setting {key} = {value}")
+                setattr(db_item, key, value)
 
-    # 3. Validate and update categories if provided
-    if item_update.category_ids is not None:
-        categories = []
-        seen_types = set()
-        if item_update.category_ids:  # If list is not empty
-            for cat_id in item_update.category_ids:
-                category = session.get(Category, cat_id)
-                if not category:
-                    raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
-                if category.type_id in seen_types:
-                    raise HTTPException(status_code=400, detail="Only one category per type is allowed")
-                seen_types.add(category.type_id)
-                categories.append(category)
-        else:
-            default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
-            if default_cat:
-                categories.append(default_cat)
-        db_item.categories = categories  # Replace existing categories
+        # 2. Validate and update recipient if provided
+        if item_update.recipient_id:
+            logger.info(f"Validating recipient {item_update.recipient_id}")
+            recipient = session.get(Recipient, item_update.recipient_id)
+            if not recipient:
+                logger.error(f"Recipient {item_update.recipient_id} not found")
+                raise HTTPException(status_code=404, detail=f"Recipient with id {item_update.recipient_id} not found")
+            db_item.recipient_id = item_update.recipient_id
+            logger.info(f"Recipient updated successfully")
 
-    # 4. Commit and refresh
-    session.add(db_item)
-    session.commit()
-    session.refresh(db_item)
-    return db_item
+        # 3. Validate and update categories if provided
+        if item_update.category_ids is not None:
+            logger.info(f"Processing categories: {item_update.category_ids}")
+            
+            # First, remove existing category links
+            logger.info("Removing existing category links")
+            existing_links = session.exec(
+                select(PaymentItemCategoryLink).where(PaymentItemCategoryLink.payment_item_id == item_id)
+            ).all()
+            for link in existing_links:
+                session.delete(link)
+            logger.info(f"Removed {len(existing_links)} existing category links")
+            
+            # Then add new category links
+            categories = []
+            seen_types = set()
+            if item_update.category_ids:  # If list is not empty
+                for cat_id in item_update.category_ids:
+                    logger.debug(f"Validating category {cat_id}")
+                    category = session.get(Category, cat_id)
+                    if not category:
+                        logger.error(f"Category {cat_id} not found")
+                        raise HTTPException(status_code=404, detail=f"Category with id {cat_id} not found")
+                    if category.type_id in seen_types:
+                        logger.error(f"Duplicate category type {category.type_id}")
+                        raise HTTPException(status_code=400, detail="Only one category per type is allowed")
+                    seen_types.add(category.type_id)
+                    categories.append(category)
+                    
+                    # Create new link
+                    link = PaymentItemCategoryLink(payment_item_id=item_id, category_id=cat_id)
+                    session.add(link)
+                    logger.debug(f"Added category link for category {cat_id}")
+            else:
+                # Assign default UNCLASSIFIED category
+                logger.info("No categories provided, assigning UNCLASSIFIED")
+                default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
+                if default_cat:
+                    categories.append(default_cat)
+                    link = PaymentItemCategoryLink(payment_item_id=item_id, category_id=default_cat.id)
+                    session.add(link)
+                    logger.info("Added UNCLASSIFIED category link")
+
+        # 4. Commit and refresh
+        logger.info("Committing changes to database")
+        session.add(db_item)
+        session.commit()
+        session.refresh(db_item)
+        logger.info(f"Successfully updated payment item {item_id}")
+        return db_item
+        
+    except Exception as e:
+        logger.error(f"Error updating payment item {item_id}: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise
 
 
 @app.delete("/payment-items/{item_id}", status_code=204)

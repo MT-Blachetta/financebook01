@@ -86,7 +86,6 @@ const EditItemPage: React.FC = () => {
   // Render the form once data is available
   return (
     <PageWrapper>
-      <h1>Edit Payment Item</h1>
       <PaymentItemForm
         initialData={paymentItem} // Pre-fill form with existing item data
         onSubmit={handleSubmit}

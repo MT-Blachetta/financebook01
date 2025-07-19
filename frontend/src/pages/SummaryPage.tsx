@@ -590,6 +590,7 @@ interface PaymentItemLineProps {
 
 // This component displays a single payment item in our list.
 const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, standardTypeId }) => {
+  const navigate = useNavigate();
   // This gets the URL for the payment item's image.
   const imageUrl = item.attachment_url;
   // This fetches the recipient information for the payment item.
@@ -610,8 +611,12 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
     return null;
   }, [item.categories, standardTypeId, allCategories]);
 
+  const handleDoubleClick = () => {
+    navigate(`/payment/${item.id}/edit`);
+  };
+
   return (
-    <Entry>
+    <Entry onDoubleClick={handleDoubleClick}>
       <ImageHolder>
         {imageUrl ? (
           <img src={imageUrl} alt="Payment attachment" />

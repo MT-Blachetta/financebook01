@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlmodel import Field, SQLModel, Relationship
+from sqlalchemy.orm import Mapped
 
 ###############################################################################
 # Association table (many-to-many) between PaymentItem and Category
@@ -79,6 +80,7 @@ class Category(SQLModel, table=True):
 
     # Optional filename of an icon associated with this category
     icon_file: Optional[str] = None
+    
 
 
 class CategoryUpdate(SQLModel):
@@ -104,6 +106,7 @@ class Recipient(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     address: Optional[str] = None
+    
 
 
 class PaymentItemBase(SQLModel):
@@ -133,6 +136,7 @@ class PaymentItem(PaymentItemBase, table=True):
     Database model for a payment item. Inherits from Base and adds DB-specific fields.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
+    
 
 # ==============================================================================
 # API Models (Pydantic Schemas) for PaymentItem
