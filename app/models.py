@@ -130,6 +130,9 @@ class PaymentItemBase(SQLModel):
     invoice_path: Optional[str] = None
     product_image_path: Optional[str] = None
     recipient_id: Optional[int] = Field(default=None, foreign_key="recipient.id")
+    
+    # Direct reference to the standard category for efficient icon retrieval
+    standard_category_id: Optional[int] = Field(default=None, foreign_key="category.id")
 
 class PaymentItem(PaymentItemBase, table=True):
     """
@@ -161,14 +164,15 @@ class PaymentItemUpdate(PaymentItemBase):
     invoice_path: Optional[str] = None
     product_image_path: Optional[str] = None
     recipient_id: Optional[int] = None
+    standard_category_id: Optional[int] = None
     category_ids: Optional[List[int]] = None
 
 class PaymentItemRead(PaymentItemBase):
     """
-
     Schema for reading/returning a payment item from the API.
     Includes the full Recipient and Category objects for detailed views.
     """
     id: int
     recipient: Optional[Recipient] = None
     categories: List[Category] = []
+    standard_category: Optional[Category] = None

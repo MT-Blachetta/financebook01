@@ -2,8 +2,6 @@
 
 FinanceBook is a web application designed for managing private finances and cash flows. It features an Android-first (though currently web-focused) approach with a unified backend, state-of-the-art technologies, and a modern design, aiming to be a fully-fledged marketable product.
 
-This project was taken over mid-development. This README describes its current state and how to operate it.
-
 ## Core Features (Current Implementation)
 
 *   **Payment Item Management**:
@@ -51,8 +49,8 @@ The project is divided into two main parts: a Python/FastAPI backend and a React
     The module handles HTTP requests, data validation and interaction with the
     database via SQLModel.
 *   **`models.py`**: Defines the data structures (SQLModel classes) for `PaymentItem`, `Category`, `CategoryType`, `Recipient`, and the association table `PaymentItemCategoryLink`. These models map directly to database tables and are used for request/response validation.
-*   **`database.py`**: Manages database connection (SQLite by default) and table creation using SQLModel.
-*   **`financebook.db`**: The SQLite database file (created on first run).
+*   **`database.py`**: Manages database connection (PostgreSQL) and table creation using SQLModel.
+*   **`.env`**: Environment configuration file containing the DATABASE_URL for PostgreSQL connection.
 
 ### Frontend (`/frontend` directory)
 
@@ -72,14 +70,46 @@ The project is divided into two main parts: a Python/FastAPI backend and a React
         *   **`NotFoundPage.tsx`**: 404 error page.
     *   **`types.ts`**: TypeScript interfaces defining the shape of data objects (e.g., `PaymentItem`, `Category`) shared across the frontend, mirroring backend models.
     *   **`styles/globalStyle.ts`**: Global CSS styles and theme variables.
-    *   **`assets/`**: Static assets like SVG icons.
+    *   **`assets/`**: Static assets like SVG icons for UI elements.
+    *   **`../icons/`**: Directory containing category icons (PNG/SVG) that can be uploaded and used for categories.
 *   **`package.json`**: Defines project metadata, scripts (dev, build, preview), and dependencies.
 *   **`vite.config.ts`**: Configuration for Vite, the frontend build tool. Includes proxy setup for API requests to the backend.
+## System Requirements
+
+Before running the application, ensure you have the following software installed:
+
+- **Python 3.8+** with venv module
+- **Node.js 18+** with npm
+- **Docker** (for PostgreSQL database)
+- **Git** (for cloning the repository)
+
+## Quick Start
+
+For a quick automated setup, use the provided execution script:
+
+```bash
+chmod +x run_app.sh
+./run_app.sh
+```
+
+The script will:
+1. Check for all required dependencies
+2. Set up the Python virtual environment
+3. Install all dependencies
+4. Create necessary configuration files
+5. Start the PostgreSQL database container
+6. Run both backend and frontend servers
+7. Open the application in your browser
+
+## Manual Setup
+
+If you prefer to set up the application manually, follow these detailed instructions:
+
 *   **`tsconfig.json`**: TypeScript compiler configuration.
 
 ## Running the Application
 
-You need Node.js and npm (or yarn) for the frontend, and Python with pip for the backend.
+
 
 ### 1. Backend (FastAPI)
 
@@ -87,35 +117,39 @@ Navigate to the project root directory (`financebook01`).
 
 **Setup:**
 
-1.  **Create a virtual environment (recommended):**
-2.  Before Creating the virtual environment, store the DATABASE_URL to the previous created '.env' file
-    (DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook),
-    then create and activate the virtual environment with: 
+1.  **Create and configure the .env file:**
+    Create a `.env` file in the `app/` directory with the database connection string:
+    ```bash
+    echo "DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook" > app/.env
+    ```
+
+2.  **Create a virtual environment (recommended):**
     ```bash
     python -m venv .venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
-    next you
-4.  **Install dependencies:**
+
+3.  **Install dependencies:**
     ```bash
     pip install --upgrade pip setuptools wheel
     pip install -r requirements.txt
     ```
-The `requirements.txt` file should include `fastapi`, `uvicorn`, `sqlmodel`, etc.
-If you get a "uvicorn: command not found" error, ensure the virtual environment is activated
-and the dependencies were installed with `pip install -r requirements.txt`.
+    The `requirements.txt` file includes `fastapi`, `uvicorn`, `sqlmodel`, `psycopg2-binary`, etc.
+    If you get a "uvicorn: command not found" error, ensure the virtual environment is activated
+    and the dependencies were installed correctly.
 
-**Create Docker image and start the postgresql docker container**
+**Create Docker image and start the PostgreSQL docker container:**
 ```bash
 sudo docker build -t financebook-postgres .
-sudo docker run -d --name financebook-db -p 5432:5432 -v postgres_data:/home/username/Projects/database financebook-postgres
+sudo docker run -d --name financebook-db -p 5432:5432 -v postgres_data:/var/lib/postgresql/data financebook-postgres
 ```
-Remember to set the DATABASE_URL correctly matching the credentials in the Dockerfile.
+The Docker container uses the credentials defined in the Dockerfile (user: `yourself`, password: `secretPassword`, database: `financebook`).
 
 **Running the backend server:**
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+source .venv/bin/activate  # Ensure virtual environment is activated
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 The backend API will be available at `http://localhost:8000`. You can access the OpenAPI documentation at `http://localhost:8000/docs`.
 
@@ -123,15 +157,20 @@ The backend API will be available at `http://localhost:8000`. You can access the
 
 Navigate to the `frontend` directory (`financebook01/frontend`).
 
+**Requirements:**
+- Node.js (version 18 or higher recommended)
+- npm or yarn package manager
+
 **Setup:**
 
 1.  **Install dependencies:**
-    If you encountered issues with `npm` or `yarn` not being found previously, ensure one is installed and available in your PATH.
     ```bash
+    cd frontend
     npm install
     ```
     or if you prefer yarn:
     ```bash
+    cd frontend
     yarn install
     ```
 
@@ -157,7 +196,7 @@ The frontend application will be available at `http://localhost:5173` (or anothe
     3.  Uses SQLModel's query interface (e.g., `select(PaymentItem)`) to interact with the database.
     4.  Commits changes (`session.commit()`) and refreshes objects (`session.refresh()`) to get updated state from the DB.
     5.  Returns the SQLModel objects, which FastAPI automatically converts to JSON.
-*   **Database (`database.py`)**: A simple SQLite database is used. The `create_db_and_tables()` function initializes the schema if the database file doesn't exist.
+*   **Database (`database.py`)**: A PostgreSQL database is used via Docker. The `create_db_and_tables()` function initializes the schema if the database tables don't exist.
 
 ### Frontend Logic
 
@@ -172,9 +211,6 @@ The frontend application will be available at `http://localhost:5173` (or anothe
 
 ## Further Development & TODOs
 
-*   **Attachment Uploads**: The backend supports uploading PNG icons for
-    categories, but payment item attachments (invoices, product images) are still
-    TODO.
 *   **Category Tree Visualisation**: The current editor is functional but could
     benefit from a more intuitive drag-and-drop tree view.
 *   **User Authentication & Authorization**: Secure the application.

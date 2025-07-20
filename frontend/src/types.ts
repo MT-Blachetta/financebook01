@@ -54,6 +54,8 @@ export interface PaymentItem {
   recipient?: Recipient | null;
 
   categories?: Category[]; // resolved by backend JOIN
+  standard_category_id?: number | null; // Direct reference to standard type category for icon display
+  standard_category?: Category | null; // Resolved standard category object
   attachment_url?: string | null; // presigned link to image/PDF on object-store
   invoice_path?: string | null; // filename of uploaded invoice document
 }
@@ -85,5 +87,6 @@ export type PaymentItemFormData = {
   description?: string | null;
   recipient_id?: number | null;
   category_ids?: number[];
+  standard_category_id?: number | null;
   attachment_url?: string | null;
 };

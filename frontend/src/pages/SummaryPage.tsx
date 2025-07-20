@@ -26,7 +26,7 @@ import DownIcon from '../assets/down.svg';
 // This imports the type for our view filter.
 import { ViewFilter } from '../components/NavigationBar';
 // This imports the functions that let us fetch data from our app's server.
-import { usePaymentItems, useAllCategories, useCategoryTypes, useRecipient, downloadInvoice } from '../api/hooks';
+import { usePaymentItems, useAllCategories, useCategoryTypes, useRecipient, useCategory, downloadInvoice } from '../api/hooks';
 // This imports the data structures we use for payment items and categories.
 import { PaymentItem, isExpense, Category } from '../types';
 
@@ -211,23 +211,49 @@ const Entry = styled.li`
   position: relative; // This allows us to position the download link absolutely within the entry.
 `;
 
-// This is the container for the payment item's image.
+// This is the container for the category icon (previously used for payment item images).
 const ImageHolder = styled.div`
-  flex: 0 0 25%; // This makes the image container take up 25% of the width of the item.
-  max-width: 120px; // This sets a maximum width for the image.
-  aspect-ratio: 1 / 1; // This makes the image container a square.
-  border-radius: var(--radius-md); // This rounds the corners of the image container.
-  background-color: transparent; // This makes the background of the image container transparent.
-  overflow: hidden; // This hides any part of the image that goes outside the container.
+  flex: 0 0 28%; // This makes the icon container take up 25% of the width of the item.
+  min-width: 60px; // This sets a minimum width for smaller screens.
+  max-width: 120px; // This sets a maximum width for the icon container.
+  aspect-ratio: 1 / 1; // This makes the icon container a square.
+  border-radius: var(--radius-md); // This rounds the corners of the icon container.
+  background-color: #333; // This matches the Entry background color for seamless icon background rendering.
+  overflow: hidden; // This hides any part of the icon that goes outside the container.
   display: flex; // This arranges the content of the container in a flexible way.
   align-items: center; // This vertically aligns the content in the center.
   justify-content: center; // This horizontally aligns the content in the center.
+  position: relative; // This allows for proper positioning of the icon.
 
   img {
-    width: 100%; // This makes the image take up the full width of the container.
-    height: 100%; // This makes the image take up the full height of the container.
-    object-fit: cover; // This makes sure the image covers the entire container without being distorted.
+    width: 67%; // This makes the icon take up 70% of the container width for proper sizing.
+    height: 67%; // This makes the icon take up 70% of the container height for proper sizing.
+    object-fit: contain; // This preserves the icon's aspect ratio and prevents distortion.
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3)); // This adds a subtle shadow for better visibility.
+    transition: transform 0.2s ease; // This adds a smooth transition for hover effects.
   }
+
+  // Responsive sizing for different screen sizes
+  @media (max-width: 768px) {
+    flex: 0 0 20%; // Smaller percentage on mobile devices.
+    min-width: 50px; // Smaller minimum width on mobile.
+    max-width: 80px; // Smaller maximum width on mobile.
+    
+    img {
+      width: 75%; // Slightly larger icon percentage on smaller screens for better visibility.
+      height: 75%;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    max-width: 140px; // Larger maximum width on larger screens.
+    
+    img {
+      width: 65%; // Slightly smaller icon percentage on larger screens for better proportions.
+      height: 65%;
+    }
+  }
+
 `;
 
 // This is the container for the main content of the payment item, to the right of the image.
@@ -580,7 +606,6 @@ const SummaryPage: React.FC = () => {
               key={item.id}
               item={item}
               allCategories={allCategories}
-              standardTypeId={standardTypeId}
             />
           ))}
 
@@ -609,11 +634,10 @@ export default SummaryPage;
 interface PaymentItemLineProps {
   item: PaymentItem; // The payment item to display.
   allCategories: Category[]; // The list of all categories.
-  standardTypeId: number | undefined; // The ID of the "standard" category type.
 }
 
 // This component displays a single payment item in our list.
-const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, standardTypeId }) => {
+const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories }) => {
   const navigate = useNavigate();
   // This gets the URL for the payment item's image.
   const imageUrl = item.attachment_url;
@@ -621,19 +645,27 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
   const { data: fetchedRecipient } = useRecipient(item.recipient_id ?? undefined);
   const recipient = item.recipient ?? fetchedRecipient;
 
-  // This finds the icon for the payment item's category.
+  // Fetch the standard category if we have a standard_category_id
+  const { data: standardCategory } = useCategory(item.standard_category_id ?? undefined);
+
+  // This finds the icon for the payment item's standard category.
   const iconUrl = React.useMemo(() => {
-    if (!item.categories || !standardTypeId) return null;
-    const cat = item.categories.find(c => c.type_id === standardTypeId);
-    let current = cat;
-    while (current) {
-      if (current.icon_file) {
-        return `/api/download_static/${current.icon_file}`;
+    // Use the fetched standard category or the one from the item
+    const category = item.standard_category || standardCategory;
+    
+    if (category) {
+      // Check the category and its parents for an icon
+      let current: Category | undefined = category;
+      while (current) {
+        if (current.icon_file) {
+          return `/api/download_static/${current.icon_file}`;
+        }
+        current = allCategories.find(c => c.id === current?.parent_id);
       }
-      current = allCategories.find(c => c.id === current?.parent_id) || undefined;
     }
+    
     return null;
-  }, [item.categories, standardTypeId, allCategories]);
+  }, [item.standard_category, standardCategory, allCategories]);
 
   const handleDoubleClick = () => {
     navigate(`/payment/${item.id}/edit`);
@@ -658,10 +690,10 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
       )}
       
       <ImageHolder>
-        {imageUrl ? (
-          <img src={imageUrl} alt="Payment attachment" />
+        {iconUrl ? (
+          <img src={iconUrl} alt="Category icon" />
         ) : (
-          // If no image, area stays same as surrounding background (transparent)
+          // If no category icon, the area maintains the Entry background color
           null
         )}
       </ImageHolder>
@@ -702,9 +734,6 @@ const PaymentItemLine: React.FC<PaymentItemLineProps> = ({ item, allCategories, 
           )}
         </MetaInfo>
         <AmountContainer>
-          {iconUrl && (
-            <img src={iconUrl} alt="category icon" style={{ width: '20px', height: '20px', marginRight: '0.25rem' }} />
-          )}
           <AmountText $negative={isExpense(item)}>
             {item.amount.toFixed(2)} €
           </AmountText>

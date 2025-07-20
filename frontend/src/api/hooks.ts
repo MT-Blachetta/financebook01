@@ -237,6 +237,23 @@ export function useAllCategories() {
 }
 
 /**
+ * Fetch a single category by its ID.
+ * @param categoryId - The ID of the category. Query is disabled if undefined.
+ * @returns React-Query result object for the category.
+ */
+export function useCategory(categoryId: number | undefined) {
+  return useQuery<Category, Error>({
+    queryKey: ['category', categoryId],
+    queryFn: async () => {
+      if (categoryId === undefined) throw new Error('Category ID is undefined');
+      const res = await api.get<Category>(`/categories/${categoryId}`);
+      return res.data;
+    },
+    enabled: categoryId !== undefined,
+  });
+}
+
+/**
  * Fetch a category and its full children tree by its ID.
  * @param categoryId - The ID of the category. Query is disabled if undefined.
  * @returns React-Query result object for the category tree.

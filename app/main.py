@@ -103,10 +103,14 @@ def create_payment_item(
         if not recipient:
             raise HTTPException(status_code=404, detail=f"Recipient with id {item_create.recipient_id} not found")
 
-    # 2. Validate categories if provided
-    category_ids = []
-    if item_create.category_ids:
+    # 2. Get standard type ID for later use
+    standard_type = session.exec(select(CategoryType).where(CategoryType.name == "standard")).first()
+    standard_type_id = standard_type.id if standard_type else None
 
+    # 3. Validate categories if provided
+    category_ids = []
+    standard_category_id = None
+    if item_create.category_ids:
         seen_types = set()
         for cat_id in item_create.category_ids:
             category = session.get(Category, cat_id)
@@ -116,22 +120,29 @@ def create_payment_item(
                 raise HTTPException(status_code=400, detail="Only one category per type is allowed")
             seen_types.add(category.type_id)
             category_ids.append(cat_id)
+            
+            # Set standard_category_id if this is a standard type category
+            if standard_type_id and category.type_id == standard_type_id:
+                standard_category_id = cat_id
     else:
         # Assign the default UNCLASSIFIED category
         default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
         if default_cat:
             category_ids.append(default_cat.id)
+            if standard_type_id and default_cat.type_id == standard_type_id:
+                standard_category_id = default_cat.id
 
-    # 3. Create PaymentItem instance from the payload
+    # 4. Create PaymentItem instance from the payload
     item_data = item_create.dict(exclude={"category_ids"})
+    item_data["standard_category_id"] = standard_category_id
     db_item = PaymentItem(**item_data)
 
-    # 4. Add to session and commit
+    # 5. Add to session and commit
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
     
-    # 5. Add category links if provided
+    # 6. Add category links if provided
     if category_ids:
         for cat_id in category_ids:
             link = PaymentItemCategoryLink(payment_item_id=db_item.id, category_id=cat_id)
@@ -239,6 +250,10 @@ def update_payment_item(
         if item_update.category_ids is not None:
             logger.info(f"Processing categories: {item_update.category_ids}")
             
+            # Get standard type ID for later use
+            standard_type = session.exec(select(CategoryType).where(CategoryType.name == "standard")).first()
+            standard_type_id = standard_type.id if standard_type else None
+            
             # First, remove existing category links
             logger.info("Removing existing category links")
             existing_links = session.exec(
@@ -248,9 +263,10 @@ def update_payment_item(
                 session.delete(link)
             logger.info(f"Removed {len(existing_links)} existing category links")
             
-            # Then add new category links
+            # Then add new category links and determine standard category
             categories = []
             seen_types = set()
+            standard_category_id = None
             if item_update.category_ids:  # If list is not empty
                 for cat_id in item_update.category_ids:
                     logger.debug(f"Validating category {cat_id}")
@@ -264,6 +280,10 @@ def update_payment_item(
                     seen_types.add(category.type_id)
                     categories.append(category)
                     
+                    # Set standard_category_id if this is a standard type category
+                    if standard_type_id and category.type_id == standard_type_id:
+                        standard_category_id = cat_id
+                    
                     # Create new link
                     link = PaymentItemCategoryLink(payment_item_id=item_id, category_id=cat_id)
                     session.add(link)
@@ -274,9 +294,15 @@ def update_payment_item(
                 default_cat = session.exec(select(Category).where(Category.name == "UNCLASSIFIED")).first()
                 if default_cat:
                     categories.append(default_cat)
+                    if standard_type_id and default_cat.type_id == standard_type_id:
+                        standard_category_id = default_cat.id
                     link = PaymentItemCategoryLink(payment_item_id=item_id, category_id=default_cat.id)
                     session.add(link)
                     logger.info("Added UNCLASSIFIED category link")
+            
+            # Update the standard_category_id field
+            db_item.standard_category_id = standard_category_id
+            logger.info(f"Set standard_category_id to {standard_category_id}")
 
         # 4. Commit and refresh
         logger.info("Committing changes to database")
@@ -376,6 +402,15 @@ def update_category(
     return category
 
 
+@app.get("/categories/{category_id}", response_model=Category)
+def get_category(category_id: int, session: Session = Depends(get_session)) -> Category:
+    """Get a single category by its ID."""
+    category = session.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return category
+
+
 @app.get("/categories/{category_id}/tree", response_model=Category)
 def get_category_tree(category_id: int, session: Session = Depends(get_session)) -> Category:
     category = session.get(Category, category_id)
@@ -446,6 +481,21 @@ def get_recipient(
 @app.post("/uploadicon/")
 def upload_icon(file: UploadFile = File(...)) -> dict:
     """Save an uploaded icon file and return its filename."""
+    # Validate file type
+    allowed_types = {
+        'image/png': '.png',
+        'image/jpeg': '.jpg',
+        'image/gif': '.gif',
+        'image/bmp': '.bmp',
+        'image/svg+xml': '.svg'
+    }
+    
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type {file.content_type} not allowed. Supported types: PNG, JPEG, GIF, BMP, SVG"
+        )
+    
     file_path = ICON_DIR / file.filename
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
