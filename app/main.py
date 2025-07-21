@@ -338,19 +338,49 @@ def update_payment_item(
 @app.delete("/payment-items/{item_id}", status_code=204)
 def delete_payment_item(item_id: int, session: Session = Depends(get_session)) -> None:
     import os
+    import logging
+    
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Starting deletion of payment item {item_id}")
     
     item = session.get(PaymentItem, item_id)
     if not item:
+        logger.error(f"Payment item {item_id} not found")
         raise HTTPException(status_code=404, detail="Item not found")
+    
+    logger.info(f"Found payment item: {item}")
     
     # Delete associated invoice file if it exists
     if item.invoice_path:
         file_path = INVOICE_DIR / item.invoice_path
         if file_path.exists():
+            logger.info(f"Deleting invoice file: {file_path}")
             os.remove(file_path)
+        else:
+            logger.warning(f"Invoice file not found on disk: {file_path}")
     
+    # Delete associated category links first (to avoid foreign key constraint issues)
+    logger.info("Deleting associated category links")
+    category_links = session.exec(
+        select(PaymentItemCategoryLink).where(PaymentItemCategoryLink.payment_item_id == item_id)
+    ).all()
+    
+    for link in category_links:
+        logger.debug(f"Deleting category link: payment_item_id={link.payment_item_id}, category_id={link.category_id}")
+        session.delete(link)
+    
+    # Commit the category link deletions first
+    session.commit()
+    logger.info(f"Deleted {len(category_links)} category links")
+    
+    # Now delete the payment item
+    logger.info("Deleting payment item")
     session.delete(item)
     session.commit()
+    
+    logger.info(f"Successfully deleted payment item {item_id}")
 
 
 # ---------------------------------------------------------------------------

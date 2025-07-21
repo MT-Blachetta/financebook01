@@ -14,11 +14,12 @@
  * - Navigates to the home/summary page upon successful item update.
  * - Displays submission status (loading/error) through props passed to `PaymentItemForm`.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { PaymentItemForm } from '../components/PaymentItemForm';
-import { usePaymentItem, useUpdatePaymentItem } from '../api/hooks';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { usePaymentItem, useUpdatePaymentItem, useDeletePaymentItem } from '../api/hooks';
 import { PaymentItem, PaymentItemFormData } from '../types';
 
 const PageWrapper = styled.div`
@@ -38,14 +39,52 @@ const ErrorMessage = styled.p`
   padding: 2rem;
 `;
 
+const ButtonContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 2rem;
+`;
+
+const DeleteButton = styled.button`
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-negative);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: #dc2626;
+  }
+
+  &:disabled {
+    background: #666;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
 const EditItemPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>(); // Get the item ID from the URL
   const itemId = id ? parseInt(id, 10) : undefined;
 
+  // State for confirmation dialog
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
   // Fetch the payment item data
   const { data: paymentItem, isLoading: isLoadingItem, isError: isFetchError, error: fetchError } = usePaymentItem(itemId);
   const updatePaymentItemMutation = useUpdatePaymentItem();
+  const deletePaymentItemMutation = useDeletePaymentItem();
 
   /**
    * Handles the submission of the updated payment item form.
@@ -64,6 +103,27 @@ const EditItemPage: React.FC = () => {
       // Error logging is useful for development.
       // The `isError` and `error` properties of the mutation are used to display errors in the form.
       console.error('Failed to update payment item:', error);
+    }
+  };
+
+  /**
+   * Handles the deletion of the payment item.
+   * Shows confirmation dialog first, then deletes the item and navigates back.
+   */
+  const handleDelete = async () => {
+    if (!itemId) {
+      console.error("Cannot delete: No item ID available");
+      return;
+    }
+
+    try {
+      await deletePaymentItemMutation.mutateAsync(itemId);
+      navigate('/'); // Navigate to summary page on success
+    } catch (error) {
+      console.error('Failed to delete payment item:', error);
+      // Error handling could be improved with a toast notification
+    } finally {
+      setShowDeleteDialog(false);
     }
   };
 
@@ -92,6 +152,28 @@ const EditItemPage: React.FC = () => {
         isSubmitting={updatePaymentItemMutation.isPending} // Changed from isLoading to isPending
         // Provide a user-friendly error message from the mutation state
         submitError={updatePaymentItemMutation.isError ? (updatePaymentItemMutation.error as Error)?.message || 'An unknown error occurred while updating the item.' : null}
+      />
+      
+      <ButtonContainer>
+        <DeleteButton
+          type="button"
+          onClick={() => setShowDeleteDialog(true)}
+          disabled={deletePaymentItemMutation.isPending}
+        >
+          {deletePaymentItemMutation.isPending ? 'Deleting...' : 'Delete'}
+        </DeleteButton>
+      </ButtonContainer>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        title="Delete Payment"
+        message={`Are you sure you want to delete this payment? This action cannot be undone. The payment item and any associated invoice documents will be permanently deleted.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        isLoading={deletePaymentItemMutation.isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
       />
     </PageWrapper>
   );
