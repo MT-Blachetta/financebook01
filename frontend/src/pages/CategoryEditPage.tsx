@@ -16,8 +16,8 @@ const PageWrapper = styled.div`
 
 
 const IconBox = styled.div`
-  width: 40px;
-  height: 40px;
+  width: 45px;
+  height: 45px;
   background: #444;
   display: flex;
   justify-content: center;
@@ -28,10 +28,33 @@ const IconBox = styled.div`
     height: 100%;
     object-fit: cover;
   }
+  span {
+    font-size: 0.8rem;
+    text-align: center;
+  }
 `;
 
 const SaveButton = styled.button`
   margin-left: auto;
+  height: 45px;
+  padding: 0 1.25rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: white;
+  color: black;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: #dedede;
+  }
+
+  &:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
 `;
 
 const AddContainer = styled.div`
@@ -86,6 +109,8 @@ const Cell = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  height: 100%;
+  justify-content: flex-end;
 `;
 
 const Label = styled.label`
@@ -99,14 +124,19 @@ const StyledSelect = styled.select`
   border-radius: var(--radius-md);
   background: #333;
   color: #eaeaea;
+  height: 45px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
 `;
 
 const EntryGrid = styled.div`
   display: grid;
-  grid-template-columns: 150px 1fr 1fr 60px auto;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.75rem;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr) 60px auto;
+  gap: 1.25rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+  min-height: 65px;
 `;
 
 interface CategoryRowProps {
@@ -193,7 +223,7 @@ const CategoryRow: React.FC<CategoryRowProps> = ({
         ) : cat.icon_file ? (
           <img src={`/api/download_static/${cat.icon_file}`} alt="icon" />
         ) : (
-          <span>add icon</span>
+          <span> add icon </span>
         )}
         <input
           type="file"

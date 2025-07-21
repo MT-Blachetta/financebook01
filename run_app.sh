@@ -180,12 +180,11 @@ print_success "Python dependencies installed"
 
 # Create .env file if it doesn't exist
 print_status "Setting up environment configuration..."
-if [ ! -f "app/.env" ]; then
-    mkdir -p app
-    echo "DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook" > app/.env
+if [ ! -f ".env" ]; then
+    echo "DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook" > .env
     print_success "Created app/.env file with database configuration"
 else
-    print_success "app/.env file already exists"
+    print_success ".env file already exists"
 fi
 
 # Setup frontend dependencies

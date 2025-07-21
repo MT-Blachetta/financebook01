@@ -159,6 +159,10 @@ def list_payment_items(
     category_ids: Optional[List[int]] = Query(None, description="List of category IDs to filter by"),
     session: Session = Depends(get_session),
 ) -> List[PaymentItem]:
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    
     if expense_only and income_only:
         raise HTTPException(status_code=400, detail="Choose only one filter: expense_only or income_only")
 
@@ -169,6 +173,8 @@ def list_payment_items(
         query = query.where(PaymentItem.amount > 0)
 
     if category_ids:
+        logger.info(f"Filtering with category IDs: {category_ids}")
+        
         # Expand the category list with all descendants so filtering a parent
         # category also returns items tagged with any of its children.
         expanded_ids: set[int] = set(category_ids)
@@ -186,16 +192,25 @@ def list_payment_items(
         for cat_id in list(category_ids):
             gather_descendants(cat_id)
 
-        query = (
-            query.join(
-                PaymentItemCategoryLink,
-                PaymentItem.id == PaymentItemCategoryLink.payment_item_id,
-            )
+        logger.info(f"Expanded category IDs (including descendants): {expanded_ids}")
+
+        # Use explicit OR logic: return payment items that have ANY of the selected categories
+        # We use a subquery to find payment item IDs that have at least one of the selected categories
+        subquery = (
+            select(PaymentItemCategoryLink.payment_item_id)
             .where(PaymentItemCategoryLink.category_id.in_(expanded_ids))
             .distinct()
         )
+        
+        # Filter the main query to only include payment items found in the subquery
+        query = query.where(PaymentItem.id.in_(subquery))
+        
+        logger.info(f"Generated explicit OR logic query for category filtering")
 
-    return session.exec(query).all()
+    results = session.exec(query).all()
+    logger.info(f"Found {len(results)} payment items matching the filters")
+    
+    return results
 
 
 @app.get("/payment-items/{item_id}", response_model=PaymentItemRead)

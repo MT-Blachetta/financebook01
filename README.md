@@ -118,9 +118,9 @@ Navigate to the project root directory (`financebook01`).
 **Setup:**
 
 1.  **Create and configure the .env file:**
-    Create a `.env` file in the `app/` directory with the database connection string:
+    Create a `.env` file with the database connection string:
     ```bash
-    echo "DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook" > app/.env
+    echo "DATABASE_URL=postgresql+psycopg2://yourself:secretPassword@localhost/financebook" > .env
     ```
 
 2.  **Create a virtual environment (recommended):**
@@ -141,7 +141,7 @@ Navigate to the project root directory (`financebook01`).
 **Create Docker image and start the PostgreSQL docker container:**
 ```bash
 sudo docker build -t financebook-postgres .
-sudo docker run -d --name financebook-db -p 5432:5432 -v postgres_data:/var/lib/postgresql/data financebook-postgres
+sudo docker run -d --name financebook-db -p 5432:5432 -v postgres_data:/home/$USERNAME/financebook/database financebook-postgres
 ```
 The Docker container uses the credentials defined in the Dockerfile (user: `yourself`, password: `secretPassword`, database: `financebook`).
 
