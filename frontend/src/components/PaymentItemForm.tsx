@@ -428,12 +428,16 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
   const [recipientAddress, setRecipientAddress] = useState<string>('');
   const [recipientModified, setRecipientModified] = useState<boolean>(false);
 
-  // Category state
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(
-    initialData && initialData.categories && initialData.categories[0]
-      ? initialData.categories[0].id.toString()
-      : ''
-  );
+  // Category state - prioritize standard_category_id over categories array
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(() => {
+    if (initialData?.standard_category_id) {
+      return initialData.standard_category_id.toString();
+    }
+    if (initialData?.categories && initialData.categories[0]) {
+      return initialData.categories[0].id.toString();
+    }
+    return '';
+  });
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   
   // Error state
@@ -462,8 +466,14 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
     setPeriodic(initialData.periodic);
     setPaymentDescription(initialData.description ?? '');
     setSelectedRecipientId(initialData.recipient_id ? initialData.recipient_id.toString() : '');
-    if (initialData.categories && initialData.categories[0]) {
+    
+    // Prioritize standard_category_id over categories array
+    if (initialData.standard_category_id) {
+      setSelectedCategoryId(initialData.standard_category_id.toString());
+    } else if (initialData.categories && initialData.categories[0]) {
       setSelectedCategoryId(initialData.categories[0].id.toString());
+    } else {
+      setSelectedCategoryId('');
     }
   }, [initialData]);
 
@@ -610,8 +620,9 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
     }
   };
 
-  const handleUploadInvoice = async () => {
-    if (!selectedFile || !initialData?.id) return;
+  const handleUploadInvoice = async (fileToUpload?: File) => {
+    const file = fileToUpload || selectedFile;
+    if (!file || !initialData?.id) return;
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -624,7 +635,7 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
 
       await uploadInvoiceMutation.mutateAsync({
         paymentItemId: initialData.id,
-        file: selectedFile,
+        file: file,
       });
 
       clearInterval(progressInterval);
@@ -683,6 +694,7 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
         description: paymentDescription.trim() || null,
         recipient_id: null,
         category_ids: [],
+        standard_category_id: null,
       };
 
       if (isEditMode && initialData?.id !== undefined) {
@@ -694,13 +706,49 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
         paymentData.recipient_id = parseInt(selectedRecipientId);
       }
       
-      // Handle category selection
+      // Handle category selection - set as standard_category_id for standard type categories
       if (selectedCategoryId) {
-        paymentData.category_ids = [parseInt(selectedCategoryId)];
+        const categoryId = parseInt(selectedCategoryId);
+        paymentData.category_ids = [categoryId];
+        paymentData.standard_category_id = categoryId; // Set as standard category
       }
       
       if (isEditMode && onSubmit) {
+        // First update the payment item
         await onSubmit(paymentData);
+        
+        // Then upload the selected file if there is one
+        if (selectedFile && initialData?.id) {
+          try {
+            setIsUploading(true);
+            setUploadProgress(0);
+            
+            // Simulate progress for better UX
+            const progressInterval = setInterval(() => {
+              setUploadProgress(prev => Math.min(prev + 10, 90));
+            }, 100);
+
+            await uploadInvoiceMutation.mutateAsync({
+              paymentItemId: initialData.id,
+              file: selectedFile,
+            });
+
+            clearInterval(progressInterval);
+            setUploadProgress(100);
+            setSelectedFile(null);
+            
+            // Reset progress after a short delay
+            setTimeout(() => {
+              setUploadProgress(0);
+              setIsUploading(false);
+            }, 1000);
+          } catch (uploadError) {
+            console.error('Error uploading invoice after payment update:', uploadError);
+            setError('Payment updated successfully, but failed to upload invoice. You can try uploading it again.');
+            setIsUploading(false);
+            setUploadProgress(0);
+          }
+        }
       } else {
         // Create the payment item first
         const createdPayment = await createPaymentMutation.mutateAsync(paymentData);
@@ -936,8 +984,8 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
                 >
                   <FileUploadIcon>📄</FileUploadIcon>
                   <FileUploadText>
-                    {selectedFile ? 
-                      (isEditMode ? 'File selected - click upload to save' : 'File selected - will be uploaded after payment creation') : 
+                    {selectedFile ?
+                      (isEditMode ? 'File selected - will be uploaded when UPDATE is pressed' : 'File selected - will be uploaded after payment creation') :
                      (isEditMode && initialData?.invoice_path ? 'Drop a new file here or click to replace' :
                       'Drop your invoice here or click to browse')}
                   </FileUploadText>
@@ -956,15 +1004,6 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
                   <FileSize>{formatFileSize(selectedFile.size)}</FileSize>
                 </FileDetails>
                 <FileActions>
-                  {isEditMode && (
-                    <FileActionButton
-                      type="button"
-                      onClick={handleUploadInvoice}
-                      disabled={uploadInvoiceMutation.isPending}
-                    >
-                      Upload
-                    </FileActionButton>
-                  )}
                   <FileActionButton
                     type="button"
                     variant="danger"
