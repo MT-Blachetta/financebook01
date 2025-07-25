@@ -27,6 +27,7 @@ import {
   // useCategoriesByType, // Will be used by CategoryTreeDisplay or similar
   // useCreateCategory    // Will be used by CategoryTreeDisplay or similar
 } from '../api/hooks';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 
 const PageWrapper = styled.div`
   padding: 1rem;
@@ -118,6 +119,7 @@ const CategoryManagerPage: React.FC = () => {
 
   const [newTypeName, setNewTypeName] = useState(''); // State for the new category type name input
   const [newTypeDescription, setNewTypeDescription] = useState('');
+  const [showSemicolonDialog, setShowSemicolonDialog] = useState(false);
 
   /**
    * Handles the submission of the form to add a new category type.
@@ -133,6 +135,13 @@ const CategoryManagerPage: React.FC = () => {
       alert("Category type name cannot be empty.");
       return;
     }
+    
+    // Check for semicolons in both name and description
+    if (newTypeName.includes(';') || newTypeDescription.includes(';')) {
+      setShowSemicolonDialog(true);
+      return;
+    }
+    
     try {
       await createCategoryTypeMutation.mutateAsync({
         name: newTypeName,
@@ -209,6 +218,17 @@ const CategoryManagerPage: React.FC = () => {
           </div>
         ))}
       */}
+
+      {/* Semicolon validation dialog */}
+      <ConfirmationDialog
+        isOpen={showSemicolonDialog}
+        title="Invalid Character"
+        message="Semicolon (;) characters are not allowed in category type names or descriptions. Please remove them before submitting."
+        confirmText="OK"
+        confirmVariant="primary"
+        onConfirm={() => setShowSemicolonDialog(false)}
+        onCancel={() => setShowSemicolonDialog(false)}
+      />
     </PageWrapper>
   );
 };

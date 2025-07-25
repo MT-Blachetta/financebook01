@@ -24,6 +24,7 @@ import {
   useUploadInvoice,
   useDeleteInvoice,
 } from '../api/hooks';
+import { ConfirmationDialog } from './ConfirmationDialog';
 
 // Styled components for customer-specified UI
 const FormContainer = styled.div`
@@ -443,6 +444,9 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
   // Error state
   const [error, setError] = useState<string | null>(null);
   
+  // Semicolon validation dialog state
+  const [showSemicolonDialog, setShowSemicolonDialog] = useState<boolean>(false);
+  
   // Invoice upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
@@ -516,6 +520,12 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
       return;
     }
 
+    // Check for semicolons in recipient fields
+    if (recipientName.includes(';') || recipientAddress.includes(';')) {
+      setShowSemicolonDialog(true);
+      return;
+    }
+
     try {
       const newRecipient = await createRecipientMutation.mutateAsync({
         name: recipientName.trim(),
@@ -537,6 +547,13 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
   const handleAddCategory = async () => {
     const name = newCategoryName.trim();
     if (!name) return;
+    
+    // Check for semicolons in category name
+    if (name.includes(';')) {
+      setShowSemicolonDialog(true);
+      return;
+    }
+    
     try {
       const newCat = await createCategoryMutation.mutateAsync({
         name,
@@ -673,10 +690,33 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
     setError(null);
   };
 
+  // Semicolon validation function
+  const validateSemicolons = (): boolean => {
+    const fieldsToCheck = [
+      { value: paymentDescription, name: 'Payment Description' },
+      { value: recipientName, name: 'Recipient Name' },
+      { value: recipientAddress, name: 'Recipient Address' },
+      { value: newCategoryName, name: 'Category Name' }
+    ];
+    
+    for (const field of fieldsToCheck) {
+      if (field.value && field.value.includes(';')) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    
+    // Check for semicolons first
+    if (!validateSemicolons()) {
+      setShowSemicolonDialog(true);
+      return;
+    }
     
     // Validate amount
     const numericAmount = parseFloat(amount);
@@ -1042,6 +1082,17 @@ export const PaymentItemForm: React.FC<PaymentItemFormProps> = ({
             : createPaymentMutation.isPending ? 'Creating...' : 'Submit'}
         </SubmitButton>
       </form>
+
+      {/* Semicolon validation dialog */}
+      <ConfirmationDialog
+        isOpen={showSemicolonDialog}
+        title="Invalid Character"
+        message="Semicolon (;) characters are not allowed in any input fields. Please remove them before submitting."
+        confirmText="OK"
+        confirmVariant="primary"
+        onConfirm={() => setShowSemicolonDialog(false)}
+        onCancel={() => setShowSemicolonDialog(false)}
+      />
     </FormContainer>
   );
 };

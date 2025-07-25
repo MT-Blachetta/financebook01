@@ -8,6 +8,7 @@ import {
   useCreateCategory,
 } from '../api/hooks';
 import { Category, CategoryType } from '../types';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 
 const PageWrapper = styled.div`
   padding: 1rem;
@@ -243,6 +244,7 @@ export default function CategoryEditPage() {
   const { data: types = [] } = useCategoryTypes();
   const createCategoryMutation = useCreateCategory();
   const [newCatName, setNewCatName] = useState('');
+  const [showSemicolonDialog, setShowSemicolonDialog] = useState(false);
 
   const standardTypeId = useMemo(() => types.find(t => t.name === 'standard')?.id, [types]);
 
@@ -295,6 +297,13 @@ export default function CategoryEditPage() {
             onClick={async () => {
               const name = newCatName.trim();
               if (!name) return;
+              
+              // Check for semicolons
+              if (name.includes(';')) {
+                setShowSemicolonDialog(true);
+                return;
+              }
+              
               const typeId = standardTypeId || (types[0] && types[0].id);
               if (!typeId) return;
               await createCategoryMutation.mutateAsync({ name, type_id: typeId, parent_id: null });
@@ -315,6 +324,17 @@ export default function CategoryEditPage() {
           getDescendants={getDescendants}
         />
       ))}
+
+      {/* Semicolon validation dialog */}
+      <ConfirmationDialog
+        isOpen={showSemicolonDialog}
+        title="Invalid Character"
+        message="Semicolon (;) characters are not allowed in category names. Please remove them before submitting."
+        confirmText="OK"
+        confirmVariant="primary"
+        onConfirm={() => setShowSemicolonDialog(false)}
+        onCancel={() => setShowSemicolonDialog(false)}
+      />
     </PageWrapper>
   );
 }
